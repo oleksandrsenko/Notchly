@@ -61,7 +61,7 @@ struct IslandRootView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(model.isExpanded ? IslandMetrics.expandHeight : IslandMetrics.collapse, value: model.isExpanded)
+        .animation(model.isExpanded ? IslandMetrics.expandHeight : IslandMetrics.collapseHeight, value: model.isExpanded)
         .animation(IslandMetrics.softSpring, value: media.showsLiveActivity)
         .animation(IslandMetrics.softSpring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
@@ -85,7 +85,8 @@ struct IslandRootView: View {
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(y: -10))
                         .animation(.easeOut(duration: 0.3).delay(0.06)),
-                    removal: .opacity.animation(.easeOut(duration: 0.26))))
+                    // Зеркально появлению: содержимое уходит вверх и гаснет, пока остров поднимается.
+                    removal: .opacity.combined(with: .offset(y: -10)).animation(.easeIn(duration: 0.22))))
         } else if let event = model.event, model.eventExpanded {
             EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
                 .frame(width: event.size.width, height: model.notchSize.height + event.size.height)
