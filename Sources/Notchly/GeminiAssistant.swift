@@ -96,7 +96,7 @@ final class GeminiAssistant: ObservableObject {
             .map { "- " + ($0.time.map { "\($0) " } ?? "") + $0.text }
             .joined(separator: "\n")
         let system = """
-        Ты — компактный помощник в Dynamic Island на Mac. Сейчас \(now).
+        Ты — компактный помощник в Notchly — «острове» в вырезе экрана Mac. Сейчас \(now).
         Текущие задачи пользователя:
         \(current.isEmpty ? "(нет)" : current)
 

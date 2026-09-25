@@ -1,9 +1,9 @@
 #!/bin/zsh
-# Один раз создаёт в связке «Вход» сертификат «DynamicIsland Dev» для подписи сборок.
+# Один раз создаёт в связке «Вход» сертификат «Notchly Dev» для подписи сборок.
 # С ним подпись не меняется между сборками, и macOS перестаёт сбрасывать выданные доступы
 # (Полный доступ к диску, Универсальный доступ, Связка ключей, Запись аудио).
 set -euo pipefail
-NAME="DynamicIsland Dev"
+NAME="Notchly Dev"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
 if security find-certificate -c "$NAME" "$KEYCHAIN" >/dev/null 2>&1; then

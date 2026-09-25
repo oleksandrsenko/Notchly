@@ -37,7 +37,7 @@ final class SystemNotificationsReader: ObservableObject {
 
     /// Сами себе уведомления не показываем, как и служебные системные.
     private static let ignored: Set<String> = [
-        "dev.aleksandrsenko.dynamicisland", "com.apple.controlcenter", "_system_center_",
+        "dev.notchly.app", "dev.aleksandrsenko.dynamicisland", "com.apple.controlcenter", "_system_center_",
     ]
 
     private var watchers: [DispatchSourceFileSystemObject] = []
@@ -169,7 +169,7 @@ final class SystemNotificationsReader: ObservableObject {
 
     enum ReadResult { case noAccess, failed(String), items([AppNotification]) }
 
-    /// Отчёт для `open DynamicIsland.app --args --notifications-selftest`: запуск через open,
+    /// Отчёт для `open Notchly.app --args --notifications-selftest`: запуск через open,
     /// чтобы действовал «Полный доступ к диску» самого приложения, а не Терминала.
     func selfTestReport() -> String {
         var lines = ["База: \(path)"]

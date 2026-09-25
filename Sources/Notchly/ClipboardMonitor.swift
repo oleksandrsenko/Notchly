@@ -47,7 +47,7 @@ final class ClipboardMonitor: ObservableObject {
     private static let maxItemsPerGroup = 100
     private static let fileURL: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("DynamicIsland", isDirectory: true)
+            .appendingPathComponent("Notchly", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("clipboard.json")
     }()

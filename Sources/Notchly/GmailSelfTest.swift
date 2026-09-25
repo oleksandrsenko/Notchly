@@ -1,6 +1,6 @@
 import Foundation
 
-/// `DynamicIsland --imap-selftest`: проверка разбора писем и соединения с Gmail без настоящего аккаунта.
+/// `Notchly --imap-selftest`: проверка разбора писем и соединения с Gmail без настоящего аккаунта.
 enum GmailSelfTest {
     static func run() {
         let headers = "From: =?UTF-8?B?0JjQstCw0L0g0J/QtdGC0YDQvtCy?= <ivan@example.com>\r\n"

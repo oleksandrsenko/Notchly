@@ -3,7 +3,7 @@ import Security
 
 /// Небольшая обёртка над Связкой ключей для секретов приложения.
 enum Keychain {
-    private static let prefix = "dev.aleksandrsenko.DynamicIsland."
+    private static let prefix = "dev.notchly.app."
 
     static func data(service: String, account: String) -> Data? {
         var query = baseQuery(service: service, account: account)

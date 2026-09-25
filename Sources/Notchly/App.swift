@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if CommandLine.arguments.contains("--notifications-selftest") {
             let report = SystemNotificationsReader().selfTestReport()
             let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("DynamicIsland/notifications-selftest.txt")
+                .appendingPathComponent("Notchly/notifications-selftest.txt")
             try? report.write(to: url, atomically: true, encoding: .utf8)
             print(report)
             exit(0)
@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             GmailClient.selfTest { lines.append("Gmail: " + $0); group.leave() }
             while group.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.1)) }
             let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("DynamicIsland/services-selftest.txt")
+                .appendingPathComponent("Notchly/services-selftest.txt")
             try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
             exit(0)
         }
@@ -85,13 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LegacyMigration.run()
         controller = NotchWindowController()
         setupStatusItem()
     }
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Dynamic Island")
+        item.button?.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Notchly")
         let menu = NSMenu()
 
         let login = NSMenuItem(title: "Запускать при входе", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")

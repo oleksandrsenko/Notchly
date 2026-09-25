@@ -202,7 +202,7 @@ private struct DeviceSheet: View {
     var onClose: () -> Void
     @ViewState private var appeared = false
 
-    /// «AirPods Max (Alexander)» → «AirPods Max», как на iPhone.
+    /// «AirPods Max (Имя)» → «AirPods Max», как на iPhone.
     private var title: String {
         device.name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
     }

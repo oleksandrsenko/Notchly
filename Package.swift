@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "DynamicIsland",
+    name: "Notchly",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "DynamicIsland",
-            path: "Sources/DynamicIsland",
+            name: "Notchly",
+            path: "Sources/Notchly",
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),

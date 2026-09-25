@@ -1,9 +1,37 @@
 import AppKit
 import SwiftUI
 
+/// Переезд со старого имени проекта (Dynamic Island → Notchly): данные и настройки переносятся один раз.
+enum LegacyMigration {
+    private static let oldBundleID = "dev.aleksandrsenko.DynamicIsland"
+    private static let doneKey = "migration.fromDynamicIsland"
+
+    static func run() {
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let old = base.appendingPathComponent("DynamicIsland", isDirectory: true)
+        let new = base.appendingPathComponent("Notchly", isDirectory: true)
+        // Файл за файлом: переносим только то, чего в новой папке ещё нет.
+        if let files = try? fm.contentsOfDirectory(atPath: old.path) {
+            try? fm.createDirectory(at: new, withIntermediateDirectories: true)
+            for file in files where !fm.fileExists(atPath: new.appendingPathComponent(file).path) {
+                try? fm.copyItem(at: old.appendingPathComponent(file), to: new.appendingPathComponent(file))
+            }
+        }
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: doneKey) else { return }
+        if let legacy = defaults.persistentDomain(forName: oldBundleID) {
+            for (key, value) in legacy where defaults.object(forKey: key) == nil {
+                defaults.set(value, forKey: key)
+            }
+        }
+        defaults.set(true, forKey: doneKey)
+    }
+}
+
 private let supportDirectory: URL = {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    let dir = base.appendingPathComponent("DynamicIsland", isDirectory: true)
+    let dir = base.appendingPathComponent("Notchly", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir
 }()
@@ -33,8 +61,12 @@ struct ShelfItem: Identifiable, Codable, Equatable {
 final class ShelfStore: ObservableObject {
     @Published private(set) var items: [ShelfItem] = []
 
-    init() {
-        items = (load([ShelfItem].self, from: "shelf.json") ?? []).filter(\.exists)
+    private let persistent: Bool
+
+    /// persistent = false — для снапшотов: ничего не читаем и не пишем на диск.
+    init(persistent: Bool = true) {
+        self.persistent = persistent
+        items = persistent ? (load([ShelfItem].self, from: "shelf.json") ?? []).filter(\.exists) : []
     }
 
     func add(_ urls: [URL]) {
@@ -59,7 +91,10 @@ final class ShelfStore: ObservableObject {
         persist()
     }
 
-    private func persist() { save(items, to: "shelf.json") }
+    private func persist() {
+        guard persistent else { return }
+        save(items, to: "shelf.json")
+    }
 }
 
 // MARK: - Заметки
@@ -87,8 +122,12 @@ final class NotesStore: ObservableObject {
 
     private var saveWork: DispatchWorkItem?
 
-    init() {
-        notes = load([Note].self, from: "notes.json") ?? []
+    private let persistent: Bool
+
+    /// persistent = false — для снапшотов: ничего не читаем и не пишем на диск.
+    init(persistent: Bool = true) {
+        self.persistent = persistent
+        notes = persistent ? (load([Note].self, from: "notes.json") ?? []) : []
         if notes.isEmpty { notes = [Note(text: "")] }
         selectedID = notes.first?.id
     }
@@ -143,7 +182,10 @@ final class NotesStore: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
-    func persist() { save(notes, to: "notes.json") }
+    func persist() {
+        guard persistent else { return }
+        save(notes, to: "notes.json")
+    }
 }
 
 // MARK: - Задачи

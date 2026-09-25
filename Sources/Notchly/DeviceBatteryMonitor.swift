@@ -54,6 +54,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 
     private var timer: Timer?
     private var loading = false
+    private var debugMac: BatteryInfo?
     /// Кто ждёт окончания текущего обновления (например, окно подключения наушников).
     private var pendingCompletions: [() -> Void] = []
     private var wasOnAC: Bool?
@@ -73,15 +74,17 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     }
 
     /// Для снапшотов.
-    func debugSet(devices: [DeviceBattery], phone: PhoneBattery?) {
+    func debugSet(devices: [DeviceBattery], phone: PhoneBattery?, mac: BatteryInfo? = nil) {
         timer?.invalidate()
+        debugMac = mac
+        if let mac { self.mac = mac }
         loading = true
         self.devices = devices
         self.phone = phone
     }
 
     func refresh(completion: (() -> Void)? = nil) {
-        mac = BatteryInfo.read()
+        mac = debugMac ?? BatteryInfo.read()
         // Обновление уже идёт — не теряем колбэк, а вызываем его, когда оно закончится.
         guard !loading else {
             if let completion { pendingCompletions.append(completion) }
@@ -252,7 +255,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 }
 
 /// Заряд iPhone. На Mac нет API, чтобы его узнать, поэтому автоматизация в «Командах» на iPhone
-/// сохраняет файл «iphone-battery.txt» в iCloud Drive (папка «Shortcuts» или «DynamicIsland»),
+/// сохраняет файл «iphone-battery.txt» в iCloud Drive (папка «Shortcuts», «Notchly» или старая «DynamicIsland»),
 /// например с текстом «85 Да» — процент и заряжается ли телефон.
 struct PhoneBattery: Equatable {
     var percent: Int
@@ -264,6 +267,7 @@ struct PhoneBattery: Equatable {
     static var candidates: [URL] {
         let docs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Mobile Documents")
         return [docs.appendingPathComponent("iCloud~is~workflow~my~workflows/Documents"),
+                docs.appendingPathComponent("com~apple~CloudDocs/Notchly"),
                 docs.appendingPathComponent("com~apple~CloudDocs/DynamicIsland"),
                 docs.appendingPathComponent("com~apple~CloudDocs/Shortcuts")]
             .map { $0.appendingPathComponent(fileName) }

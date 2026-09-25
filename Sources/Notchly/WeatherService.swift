@@ -33,8 +33,8 @@ struct Weather: Equatable {
     var summary: String {
         switch code {
         case 0: return "Ясно"
-        case 1: return "Преимущественно ясно"
-        case 2: return "Переменная облачность"
+        case 1: return "Почти ясно"
+        case 2: return "С прояснениями"
         case 3: return "Пасмурно"
         case 45, 48: return "Туман"
         case 51...57: return "Морось"
@@ -52,6 +52,12 @@ struct Weather: Equatable {
 /// а если доступ не выдан — примерно по IP.
 final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var weather: Weather?
+
+    /// Для снапшотов: вымышленная погода вместо настоящей геолокации.
+    func debugSet(_ weather: Weather) {
+        timer?.invalidate()
+        self.weather = weather
+    }
 
     private let location = CLLocationManager()
     private var coordinate: CLLocationCoordinate2D?

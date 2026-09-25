@@ -7,7 +7,7 @@ enum SnapshotFlags {
     static var notesMode: NotesView.Mode = .notes
 }
 
-/// `DynamicIsland --snapshots <папка>` рендерит все состояния острова в PNG —
+/// `Notchly --snapshots <папка>` рендерит все состояния острова в PNG —
 /// удобно проверять вёрстку без записи экрана.
 enum Snapshots {
     @MainActor
@@ -22,6 +22,8 @@ enum Snapshots {
         }
         model.media.debugSet(title: "Blinding Lights", artist: "The Weeknd", album: "After Hours",
                              duration: 200, elapsed: 74, playing: true, artwork: art, bundleID: "com.apple.Music")
+        model.weather.debugSet(Weather(temperature: 18, high: 21, low: 12, code: 1, isDay: true, city: "Берлин",
+                                       latitude: 52.52, longitude: 13.40))
         model.shelf.add([URL(fileURLWithPath: "/System/Applications/Music.app"),
                          URL(fileURLWithPath: "/etc/hosts")])
 
@@ -41,7 +43,7 @@ enum Snapshots {
         }
 
         model.clipboard.add(text: "git commit -m fix", bundleID: "com.apple.Terminal", appName: "Терминал")
-        model.clipboard.add(text: "Привет! Сделай мне Dynamic Island", bundleID: "com.anthropic.claudefordesktop", appName: "Claude")
+        model.clipboard.add(text: "Привет! Сделай мне остров в вырезе", bundleID: "com.anthropic.claudefordesktop", appName: "Claude")
         model.clipboard.add(text: "https://music.yandex.ru", bundleID: "com.google.Chrome", appName: "Google Chrome")
         model.clipboard.add(text: "Вторая строка из Claude", bundleID: "com.anthropic.claudefordesktop", appName: "Claude")
         model.clipPeek = nil; model.peek = false
@@ -76,7 +78,8 @@ enum Snapshots {
                 .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 64, charging: true)],
                 isConnected: false),
             DeviceBattery(name: "Magic Mouse", symbol: "magicmouse.fill", levels: [.init(label: "", symbol: "", percent: 57)])],
-            phone: PhoneBattery(percent: 76, charging: true, updated: Date().addingTimeInterval(-600)))
+            phone: PhoneBattery(percent: 76, charging: true, updated: Date().addingTimeInterval(-600)),
+            mac: BatteryInfo(percent: 82, charging: false))
         model.tasks.debugSet([
             TaskItem(text: "Спортзал", time: "17:00"),
             TaskItem(text: "Немецкий", time: "18:30", notes: "Урок 12: Perfekt\nhttps://www.youtube.com/watch?v=abc\nПовторить слова из прошлого урока"),

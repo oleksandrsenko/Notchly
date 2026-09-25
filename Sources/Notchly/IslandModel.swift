@@ -145,8 +145,8 @@ final class IslandModel: ObservableObject {
     let volume = VolumeController()
     let brightness = BrightnessController()
     let mixer = AppAudioMixer()
-    let shelf = ShelfStore()
-    let notes = NotesStore()
+    let shelf: ShelfStore
+    let notes: NotesStore
     let clipboard: ClipboardMonitor
     let tasks: TasksStore
     let gemini = GeminiAssistant()
@@ -167,6 +167,8 @@ final class IslandModel: ObservableObject {
     /// persistent = false — для снапшотов: ничего не читаем и не пишем на диск.
     init(persistent: Bool = true) {
         clipboard = ClipboardMonitor(persistent: persistent)
+        shelf = ShelfStore(persistent: persistent)
+        notes = NotesStore(persistent: persistent)
         tasks = TasksStore(persistent: persistent)
         reminders = ReminderCenter(tasks: tasks)
         tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .home

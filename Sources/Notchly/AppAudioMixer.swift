@@ -294,7 +294,7 @@ private final class ProcessTap {
         self.gain = GainBox(gain)
 
         let description = CATapDescription(stereoMixdownOfProcesses: processes)
-        description.name = "Dynamic Island mixer"
+        description.name = "Notchly mixer"
         description.muteBehavior = .muted
         description.isPrivate = true
         description.isExclusive = false
@@ -306,8 +306,8 @@ private final class ProcessTap {
 
         guard let outputUID = Self.defaultOutputUID() else { stop(); return nil }
         let aggregate: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "Dynamic Island mixer",
-            kAudioAggregateDeviceUIDKey: "dev.aleksandrsenko.DynamicIsland.mixer.\(UUID().uuidString)",
+            kAudioAggregateDeviceNameKey: "Notchly mixer",
+            kAudioAggregateDeviceUIDKey: "dev.notchly.app.mixer.\(UUID().uuidString)",
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
