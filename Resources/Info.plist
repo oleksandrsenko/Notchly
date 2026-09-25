@@ -28,6 +28,8 @@
     <string>Нужно, чтобы показывать погоду для вашего города.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Нужно, чтобы показывать погоду для вашего города.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Нужно, чтобы менять громкость отдельных приложений.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Нужно, чтобы показывать и переключать треки в Apple Music и Spotify.</string>
 </dict>

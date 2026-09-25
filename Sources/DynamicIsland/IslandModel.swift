@@ -87,6 +87,7 @@ final class IslandModel: ObservableObject {
     let media = MediaController()
     let volume = VolumeController()
     let brightness = BrightnessController()
+    let mixer = AppAudioMixer()
     let shelf = ShelfStore()
     let notes = NotesStore()
     let clipboard = ClipboardMonitor()

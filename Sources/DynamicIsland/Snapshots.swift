@@ -60,7 +60,19 @@ enum Snapshots {
             clipHost.cacheDisplay(in: clipHost.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("6-clipboard.png"))
         }
+        func icon(_ path: String) -> NSImage { NSWorkspace.shared.icon(forFile: path) }
+        model.mixer.debugSet(apps: [
+            AudioApp(bundleID: "com.apple.Music", name: "Музыка", icon: icon("/System/Applications/Music.app"),
+                     processes: [], isPlaying: true),
+            AudioApp(bundleID: "com.apple.Safari", name: "Safari", icon: icon("/Applications/Safari.app"),
+                     processes: [], isPlaying: true),
+            AudioApp(bundleID: "ru.keepcoder.Telegram", name: "Telegram", icon: icon("/Applications/Telegram.app"),
+                     processes: [], isPlaying: false)],
+            levels: ["com.apple.Safari": 0.35], muted: ["ru.keepcoder.Telegram"], access: .granted)
         for tab in IslandTab.allCases { model.tab = tab; shot("4-\(tab.rawValue)") }
+        model.tab = .controls
+        model.mixer.debugSet(apps: [], levels: [:], muted: [], access: .granted); shot("4-controls-empty")
+        model.mixer.debugSet(apps: [], levels: [:], muted: [], access: .denied); shot("4-controls-denied")
         model.media.debugSet(title: "", artist: "", album: "", duration: 0, elapsed: 0, playing: false, artwork: nil, bundleID: nil)
         model.tab = .music; shot("5-empty")
     }

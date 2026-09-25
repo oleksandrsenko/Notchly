@@ -80,7 +80,7 @@ struct ExpandedIslandView: View {
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
         case .notes: NotesView(store: model.notes, clipboard: model.clipboard, vault: model.vault)
         case .notifications: NotificationsView(gmail: model.gmail, system: model.systemNotifications)
-        case .controls: ControlsView(volume: model.volume, brightness: model.brightness)
+        case .controls: ControlsView(volume: model.volume, brightness: model.brightness, mixer: model.mixer)
         }
     }
 }

@@ -17,6 +17,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             GmailSelfTest.run()
             exit(0)
         }
+        if CommandLine.arguments.contains("--mixer-selftest") {
+            let mixer = AppAudioMixer()
+            RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+            print("Доступ к записи аудио: \(mixer.access)")
+            for app in mixer.apps {
+                print("\(app.name) [\(app.bundleID)] процессы: \(app.processes) играет: \(app.isPlaying)")
+            }
+            if mixer.apps.isEmpty { print("Звук сейчас никто не выводит") }
+            exit(0)
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
