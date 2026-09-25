@@ -12,8 +12,9 @@ final class GeminiAssistant: ObservableObject {
 
     private static let service = "gemini"
     private static let account = "api-key"
-    /// Сначала «последняя flash», если Google её не отдаёт — фиксированная версия.
-    private static let models = ["gemini-flash-latest", "gemini-2.5-flash"]
+    /// Если модель перегружена (503), упёрлась в лимит (429) или недоступна (404) — пробуем следующую.
+    private static let models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite",
+                                 "gemini-flash-lite-latest", "gemini-2.0-flash"]
 
     init() {
         hasKey = Keychain.data(service: Self.service, account: Self.account) != nil
@@ -64,7 +65,6 @@ final class GeminiAssistant: ObservableObject {
     // MARK: - Запрос
 
     private struct Answer { var reply: String; var tasks: [SuggestedTask] }
-    private enum Failure: Error { case message(String) }
     private enum Result { case success(Answer), failure(String) }
 
     private static func requestBody(for text: String, tasks: [TaskItem]) -> [String: Any] {
@@ -125,8 +125,10 @@ final class GeminiAssistant: ObservableObject {
         request.httpBody = data
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if status == 404, models.count > 1 {
-                self?.send(body: body, key: key, models: Array(models.dropFirst()), done: done)
+            if [404, 429, 500, 503].contains(status), models.count > 1 {
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
+                    self?.send(body: body, key: key, models: Array(models.dropFirst()), done: done)
+                }
                 return
             }
             if let error { return done(.failure(error.localizedDescription)) }
@@ -135,9 +137,16 @@ final class GeminiAssistant: ObservableObject {
             }
             guard status == 200 else {
                 let message = (json["error"] as? [String: Any])?["message"] as? String
-                return done(.failure(status == 400 || status == 403
-                                     ? "Ключ API не подошёл" + (message.map { ": \($0)" } ?? "")
-                                     : message ?? "Ошибка Gemini (\(status))"))
+                switch status {
+                case 400, 401, 403:
+                    return done(.failure("Ключ API не подошёл" + (message.map { ": \($0)" } ?? "")))
+                case 429:
+                    return done(.failure("Лимит бесплатных запросов исчерпан — попробуйте позже"))
+                case 500, 503:
+                    return done(.failure("Серверы Gemini сейчас перегружены — попробуйте через минуту"))
+                default:
+                    return done(.failure(message ?? "Ошибка Gemini (\(status))"))
+                }
             }
             let text = ((json["candidates"] as? [[String: Any]])?.first?["content"] as? [String: Any])
                 .flatMap { $0["parts"] as? [[String: Any]] }?

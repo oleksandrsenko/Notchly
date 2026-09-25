@@ -66,10 +66,16 @@ final class ShelfStore: ObservableObject {
 
 struct Note: Identifiable, Codable, Equatable {
     var id = UUID()
+    /// Простой текст — для заголовка и поиска.
     var text: String
     var updatedAt = Date()
+    /// Текст с форматированием (жирный, курсив, размер…).
+    var rtf: Data?
+    /// Имя, которое задали вручную; иначе заголовок — первая строка.
+    var customTitle: String?
 
     var title: String {
+        if let customTitle, !customTitle.isEmpty { return customTitle }
         let first = text.split(separator: "\n", omittingEmptySubsequences: true).first.map(String.init) ?? ""
         return first.trimmingCharacters(in: .whitespaces).isEmpty ? "Новая заметка" : first
     }
@@ -89,12 +95,6 @@ final class NotesStore: ObservableObject {
 
     var selected: Note? { notes.first { $0.id == selectedID } }
 
-    func binding(for id: UUID) -> Binding<String> {
-        Binding(
-            get: { [weak self] in self?.notes.first { $0.id == id }?.text ?? "" },
-            set: { [weak self] text in self?.update(id, text: text) })
-    }
-
     func create() {
         let note = Note(text: "")
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -110,6 +110,25 @@ final class NotesStore: ObservableObject {
             if notes.isEmpty { notes = [Note(text: "")] }
             if selectedID == id { selectedID = notes.first?.id }
         }
+        persist()
+    }
+
+    func attributed(for id: UUID) -> NSAttributedString {
+        guard let note = notes.first(where: { $0.id == id }) else { return NSAttributedString() }
+        if let rtf = note.rtf, let value = NSAttributedString(rtf: rtf, documentAttributes: nil) { return value }
+        return NSAttributedString(string: note.text, attributes: RichTextEditor.defaultAttributes)
+    }
+
+    func updateRich(_ id: UUID, _ value: NSAttributedString) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].rtf = value.rtf(from: NSRange(location: 0, length: value.length), documentAttributes: [:])
+        update(id, text: value.string)
+    }
+
+    func rename(_ id: UUID, to title: String) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        notes[index].customTitle = trimmed.isEmpty ? nil : trimmed
         persist()
     }
 
@@ -173,6 +192,21 @@ final class TasksStore: ObservableObject {
     func toggle(_ id: UUID) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items[i].done.toggle() }
+        persist()
+    }
+
+    func update(_ id: UUID, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        if trimmed.isEmpty { return remove(id) }
+        // Время можно поправить прямо в тексте: «Спортзал 18:30».
+        if let match = trimmed.range(of: #"\s(\d{1,2}[:.]\d{2})$"#, options: .regularExpression),
+           let time = GeminiAssistant.normalizedTime(String(trimmed[match]).trimmingCharacters(in: .whitespaces)) {
+            items[i].text = String(trimmed[..<match.lowerBound])
+            items[i].time = time
+        } else {
+            items[i].text = trimmed
+        }
         persist()
     }
 

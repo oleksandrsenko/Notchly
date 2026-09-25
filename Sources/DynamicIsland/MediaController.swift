@@ -402,14 +402,14 @@ final class MediaController: ObservableObject {
 enum ArtworkColor {
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-    /// Поле вокруг обложки в долях её стороны: свечение растекается на 3/8 стороны в каждую сторону.
-    static let glowSpread: CGFloat = 0.375
+    /// Поле вокруг обложки в долях её стороны: свечение растекается на 5/8 стороны в каждую сторону.
+    static let glowSpread: CGFloat = 0.625
 
-    /// Обложка 64×64 в прозрачном поле 24 px, размытая по Гауссу: каждый край светит своим цветом
+    /// Обложка 64×64 в прозрачном поле 40 px, размытая по Гауссу: каждый край светит своим цветом
     /// и плавно уходит в ноль, без резких границ.
     static func glow(of image: NSImage) -> NSImage? {
         guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-        let inner = 64, pad = 24, side = inner + pad * 2
+        let inner = 64, pad = 40, side = inner + pad * 2
         guard let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpaceCreateDeviceRGB(),
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
@@ -417,8 +417,10 @@ enum ArtworkColor {
         ctx.draw(cg, in: CGRect(x: pad, y: pad, width: inner, height: inner))
         guard let padded = ctx.makeImage() else { return nil }
         let source = CIImage(cgImage: padded)
-        let soft = source.applyingGaussianBlur(sigma: 8).cropped(to: source.extent)
-            .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 1.35])
+        let soft = source.applyingGaussianBlur(sigma: 12).cropped(to: source.extent)
+            .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 1.55, kCIInputBrightnessKey: 0.06])
+            // Чуть усиливаем прозрачность, чтобы свечение было ярче и дальше растекалось.
+            .applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1.6)])
         guard let out = ciContext.createCGImage(soft, from: source.extent) else { return nil }
         return NSImage(cgImage: out, size: NSSize(width: side, height: side))
     }

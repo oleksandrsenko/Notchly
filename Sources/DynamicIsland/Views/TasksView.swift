@@ -21,6 +21,7 @@ struct TasksView: View {
                         VStack(spacing: 1) {
                             ForEach(store.sorted) { task in
                                 TaskRow(task: task) { store.toggle(task.id) } onDelete: { store.remove(task.id) }
+                                    onEdit: { store.update(task.id, text: $0) }
                                     .transition(.opacity.combined(with: .offset(y: -4)))
                             }
                         }
@@ -61,7 +62,17 @@ private struct TaskRow: View {
     var task: TaskItem
     var onToggle: () -> Void
     var onDelete: () -> Void
+    var onEdit: (String) -> Void
     @ViewState private var hovering = false
+    @ViewState private var editing = false
+    @ViewState private var draft = ""
+    @FocusState private var focused: Bool
+
+    private func commit() {
+        guard editing else { return }
+        editing = false
+        if draft != task.text { onEdit(draft) }
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -82,11 +93,29 @@ private struct TaskRow: View {
             }
             .buttonStyle(PressableStyle())
 
-            Text(task.text)
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(task.done ? 0.35 : 0.9))
-                .strikethrough(task.done, color: .white.opacity(0.35))
-                .lineLimit(1)
+            if editing {
+                TextField("", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .focused($focused)
+                    .onSubmit(commit)
+                    .onExitCommand { editing = false }
+                    .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
+            } else {
+                // Нажатие на текст — исправить задачу.
+                Text(task.text)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(task.done ? 0.35 : 0.9))
+                    .strikethrough(task.done, color: .white.opacity(0.35))
+                    .lineLimit(1)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        draft = task.text + (task.time.map { " \($0)" } ?? "")
+                        editing = true
+                        DispatchQueue.main.async { focused = true }
+                    }
+                    .help("Нажмите, чтобы исправить")
+            }
             Spacer(minLength: 4)
             ZStack(alignment: .trailing) {
                 if let time = task.time {
@@ -97,9 +126,9 @@ private struct TaskRow: View {
                         .padding(.horizontal, 6)
                         .frame(height: 17)
                         .background(Capsule().fill(.white.opacity(0.08)))
-                        .opacity(hovering ? 0 : 1)
+                        .opacity(hovering || editing ? 0 : 1)
                 }
-                if hovering {
+                if hovering && !editing {
                     Button(action: onDelete) {
                         Image(systemName: "xmark")
                             .font(.system(size: 9, weight: .bold))
@@ -115,7 +144,8 @@ private struct TaskRow: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(hovering ? 0.06 : 0)))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(.white.opacity(editing ? 0.1 : hovering ? 0.06 : 0)))
         .contentShape(Rectangle())
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
     }

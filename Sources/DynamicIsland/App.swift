@@ -17,6 +17,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             GmailSelfTest.run()
             exit(0)
         }
+        if CommandLine.arguments.contains("--notifications-selftest") {
+            let report = SystemNotificationsReader().selfTestReport()
+            let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("DynamicIsland/notifications-selftest.txt")
+            try? report.write(to: url, atomically: true, encoding: .utf8)
+            print(report)
+            exit(0)
+        }
+        if CommandLine.arguments.contains("--batteries-selftest") {
+            let monitor = DeviceBatteryMonitor()
+            RunLoop.main.run(until: Date().addingTimeInterval(4))
+            for d in monitor.devices {
+                print(d.name, d.isConnected ? "подключено" : "не подключено", d.levels.map { "\($0.label) \($0.percent)%" })
+            }
+            print("Аксессуары на главной:", monitor.accessories.map(\.name))
+            exit(0)
+        }
         if CommandLine.arguments.contains("--mixer-selftest") {
             let mixer = AppAudioMixer()
             RunLoop.main.run(until: Date().addingTimeInterval(1.5))

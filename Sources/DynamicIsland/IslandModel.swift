@@ -145,6 +145,11 @@ final class IslandModel: ObservableObject {
         batteries.onChargerConnected = { [weak self] info in self?.showEvent(.charging(info)) }
         batteries.onAudioDeviceConnected = { [weak self] device in self?.showEvent(.device(device)) }
         systemNotifications.onNew = { [weak self] item in self?.showEvent(.notification(item)) }
+        gmail.onNew = { [weak self] mail in
+            self?.showEvent(.notification(AppNotification(
+                id: "gmail-\(mail.id)", bundleID: AppNotification.gmailID, title: mail.senderName,
+                subtitle: "", body: mail.subject, date: mail.date)))
+        }
 
         volume.onExternalChange = { [weak self] value, muted in
             self?.showHUD(HUDState(kind: .volume, value: value, muted: muted))

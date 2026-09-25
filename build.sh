@@ -17,6 +17,14 @@ clang -fobjc-arc -dynamiclib -O2 -arch arm64 -arch arm64e -arch x86_64 \
     -mmacosx-version-min=14.0 -framework Foundation \
     MediaAdapter/MediaAdapter.m -o "$APP/Contents/Resources/libIslandMedia.dylib"
 
-codesign --force --sign - "$APP/Contents/Resources/libIslandMedia.dylib"
-codesign --force --sign - "$APP"
+# Постоянный сертификат (scripts/setup-signing.sh) сохраняет выданные доступы между сборками.
+# Без него — ad-hoc подпись, и macOS заново спрашивает доступы после каждой сборки.
+SIGN="-"
+if security find-identity -v -p codesigning | grep -q "DynamicIsland Dev"; then
+    SIGN="DynamicIsland Dev"
+else
+    echo "Подсказка: запустите scripts/setup-signing.sh, чтобы доступы не сбрасывались после сборки."
+fi
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/libIslandMedia.dylib"
+codesign --force --sign "$SIGN" "$APP"
 echo "Готово: $APP"

@@ -106,6 +106,7 @@ struct IslandRootView: View {
     }
 
     private func openApp(_ bundleID: String) {
+        if bundleID == AppNotification.gmailID { return model.gmail.openInbox() }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: .init())
     }

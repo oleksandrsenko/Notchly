@@ -24,6 +24,12 @@ struct NotificationsView: View {
                 gmailSection
                 if system.needsFullDiskAccess {
                     accessRow
+                } else if let error = system.readError {
+                    Text(error)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.orange.opacity(0.8))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
                 }
                 if !appGroups.isEmpty {
                     HStack {
@@ -146,7 +152,7 @@ struct NotificationsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Telegram, WhatsApp и другие приложения")
                     .font(.system(size: 11.5, weight: .semibold))
-                Text("Нужен «Полный доступ к диску» для DynamicIsland")
+                Text("Нужен «Полный доступ к диску». Уже выдан? Удалите DynamicIsland из списка и добавьте снова")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.5))
             }

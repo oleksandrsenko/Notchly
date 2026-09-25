@@ -1,5 +1,6 @@
 import Foundation
 import IOBluetooth
+import IOKit
 import IOKit.ps
 
 struct DeviceBattery: Identifiable, Equatable {
@@ -145,13 +146,19 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let controllers = json["SPBluetoothDataType"] as? [[String: Any]] else { return [] }
 
+        let hid = hidBatteries()
         var result: [DeviceBattery] = []
         for controller in controllers {
             for (key, connected) in [("device_connected", true), ("device_not_connected", false)] {
                 for entry in controller[key] as? [[String: Any]] ?? [] {
                     for (name, value) in entry {
                         guard let info = value as? [String: Any] else { continue }
-                        let levels = parseLevels(info, name: name)
+                        var levels = parseLevels(info, name: name)
+                        // Magic Mouse, клавиатура и трекпад: в новых macOS system_profiler не отдаёт их заряд,
+                        // но он есть у HID-сервиса устройства.
+                        if levels.isEmpty, connected, let percent = hidPercent(for: info, in: hid) {
+                            levels = [DeviceBattery.Level(label: "", symbol: "", percent: percent)]
+                        }
                         guard !levels.isEmpty else { continue }
                         result.append(DeviceBattery(name: name, symbol: symbol(for: name, info: info),
                                                     levels: levels, isConnected: connected))
@@ -160,6 +167,39 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
             }
         }
         return result.sorted { $0.name < $1.name }
+    }
+
+    private struct HIDBattery { var address: String; var productID: Int; var percent: Int }
+
+    /// Заряд Bluetooth-устройств Apple из IOKit (AppleDeviceManagementHIDEventService).
+    private static func hidBatteries() -> [HIDBattery] {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("AppleDeviceManagementHIDEventService"),
+                                           &iterator) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var result: [HIDBattery] = []
+        while case let service = IOIteratorNext(iterator), service != 0 {
+            defer { IOObjectRelease(service) }
+            func prop(_ key: String) -> Any? {
+                IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+            }
+            guard let percent = prop("BatteryPercent") as? Int else { continue }
+            let address = (prop("DeviceAddress") as? String ?? "").replacingOccurrences(of: "-", with: ":").uppercased()
+            result.append(HIDBattery(address: address, productID: prop("ProductID") as? Int ?? -1, percent: percent))
+        }
+        return result
+    }
+
+    private static func hidPercent(for info: [String: Any], in hid: [HIDBattery]) -> Int? {
+        if let address = (info["device_address"] as? String)?.uppercased(),
+           let match = hid.first(where: { $0.address == address }) {
+            return match.percent
+        }
+        if let raw = info["device_productID"] as? String, let pid = Int(raw.dropFirst(2), radix: 16) {
+            let matches = hid.filter { $0.productID == pid }
+            if matches.count == 1 { return matches[0].percent }
+        }
+        return nil
     }
 
     private static func parseLevels(_ info: [String: Any], name: String) -> [DeviceBattery.Level] {

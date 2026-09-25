@@ -25,7 +25,7 @@ struct MusicPlayerView: View {
                                 .resizable()
                                 .interpolation(.high)
                                 .frame(width: side, height: side)
-                                .opacity(media.isPlaying ? 0.8 : 0.3)
+                                .opacity(media.isPlaying ? 1 : 0.35)
                                 .allowsHitTesting(false)
                                 .transition(.opacity)
                         }
@@ -43,7 +43,7 @@ struct MusicPlayerView: View {
                             .foregroundStyle(.white)
                         Text(media.artist.isEmpty ? media.album : media.artist)
                             .font(.system(size: 13.5, weight: .medium))
-                            .foregroundStyle(media.accent.opacity(0.9))
+                            .foregroundStyle(.white.opacity(0.6))
                     }
                     .lineLimit(1)
                     .id(media.trackID)
@@ -52,7 +52,7 @@ struct MusicPlayerView: View {
                         removal: .offset(y: -14).combined(with: .blurFade)))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    EqualizerView(isPlaying: media.isPlaying, color: media.accent, bars: 5)
+                    EqualizerView(isPlaying: media.isPlaying, color: .white, bars: 5)
                         .frame(width: 26, height: 20)
                         .padding(.top, 4)
                 }
@@ -74,7 +74,7 @@ struct MusicPlayerView: View {
                 .overlay(alignment: .trailing) {
                     // Незаметная кнопка повтора трека.
                     IconButton(systemName: "repeat.1", size: 12, padding: 6) { media.toggleRepeat() }
-                        .foregroundStyle(media.repeatOne ? media.accent : .white)
+                        .foregroundStyle(.white)
                         .opacity(media.repeatOne ? 0.95 : 0.35)
                         .help(media.repeatOne ? "Повтор трека включён" : "Повторять этот трек")
                 }
@@ -100,7 +100,7 @@ private struct ProgressSection: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(.white.opacity(0.18))
                         Capsule()
-                            .fill(media.accent.gradient)
+                            .fill(Color.white)
                             .frame(width: geo.size.width * fraction)
                             .animation(scrub == nil ? .linear(duration: 0.5) : nil, value: fraction)
                     }
@@ -177,9 +177,7 @@ private struct ServiceColumn: View {
                     .help(service.appURL == nil ? "Открыть \(service.name) в браузере" : "Открыть \(service.name)")
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 5)
-        .background(Capsule().fill(.white.opacity(0.05)))
+        .padding(.vertical, 2)
     }
 }
 
@@ -213,9 +211,9 @@ private struct ServiceButton: View {
     var body: some View {
         Button { service.open() } label: {
             VStack(spacing: 5) {
-                ServiceLogo(name: service.name)
+                ServiceLogo(name: service.name, hovering: hovering)
                     .frame(width: iconSize, height: iconSize)
-                    .scaleEffect(hovering ? 1.1 : 1)
+                    .scaleEffect(hovering ? 1.06 : 1)
                 if showsName {
                     Text(service.name)
                         .font(.system(size: 10, weight: .medium))
@@ -230,83 +228,63 @@ private struct ServiceButton: View {
     }
 }
 
-/// Логотипы сервисов, нарисованные векторно — чёткие в любом размере.
+/// Логотипы сервисов: минималистичные белые знаки на полупрозрачном круге, векторные.
 struct ServiceLogo: View {
     var name: String
+    var hovering = false
 
     var body: some View {
         GeometryReader { geo in
             let s = min(geo.size.width, geo.size.height)
-            switch name {
-            case "Spotify": spotify(s)
-            case "YouTube Music": youTubeMusic(s)
-            default: appleMusic(s)
+            ZStack {
+                Circle().fill(.white.opacity(hovering ? 0.16 : 0.08))
+                glyph(s).foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
             }
         }
         .aspectRatio(1, contentMode: .fit)
     }
 
-    private func appleMusic(_ s: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: s * 0.225, style: .continuous)
-            .fill(LinearGradient(colors: [Color(red: 0.98, green: 0.37, blue: 0.47),
-                                          Color(red: 0.98, green: 0.14, blue: 0.25)],
-                                 startPoint: .top, endPoint: .bottom))
-            .overlay {
-                // Двойная нота: две головки и соединённые штили.
-                Path { p in
-                    p.move(to: CGPoint(x: 0.40 * s, y: 0.66 * s))
-                    p.addLine(to: CGPoint(x: 0.40 * s, y: 0.30 * s))
-                    p.addLine(to: CGPoint(x: 0.70 * s, y: 0.24 * s))
-                    p.addLine(to: CGPoint(x: 0.70 * s, y: 0.60 * s))
-                }
-                .stroke(.white, style: StrokeStyle(lineWidth: s * 0.055, lineCap: .round, lineJoin: .round))
-                Ellipse().fill(.white)
-                    .frame(width: s * 0.17, height: s * 0.13)
-                    .rotationEffect(.degrees(-18))
-                    .position(x: 0.335 * s, y: 0.675 * s)
-                Ellipse().fill(.white)
-                    .frame(width: s * 0.17, height: s * 0.13)
-                    .rotationEffect(.degrees(-18))
-                    .position(x: 0.635 * s, y: 0.615 * s)
-            }
-    }
-
-    private func spotify(_ s: CGFloat) -> some View {
-        Circle()
-            .fill(Color(red: 0.12, green: 0.84, blue: 0.38))
-            .overlay {
-                let arcs: [(CGFloat, CGFloat, CGFloat, CGFloat, CGFloat)] = [
-                    // y начала, y вершины, ширина половины, y конца, толщина
-                    (0.37, 0.25, 0.28, 0.43, 0.085),
-                    (0.52, 0.42, 0.24, 0.57, 0.07),
-                    (0.66, 0.58, 0.20, 0.70, 0.058),
-                ]
-                ForEach(0..<arcs.count, id: \.self) { i in
-                    let a = arcs[i]
+    @ViewBuilder
+    private func glyph(_ s: CGFloat) -> some View {
+        switch name {
+        case "Spotify":
+            // Три дуги Spotify.
+            ZStack {
+                ForEach(0..<3, id: \.self) { i in
+                    let half = [0.25, 0.21, 0.17][i], y = [0.38, 0.51, 0.63][i], top = [0.28, 0.43, 0.56][i]
                     Path { p in
-                        p.move(to: CGPoint(x: (0.5 - a.2) * s, y: a.0 * s))
-                        p.addQuadCurve(to: CGPoint(x: (0.5 + a.2) * s, y: a.3 * s),
-                                       control: CGPoint(x: 0.5 * s, y: a.1 * s))
+                        p.move(to: CGPoint(x: (0.5 - half) * s, y: y * s))
+                        p.addQuadCurve(to: CGPoint(x: (0.5 + half) * s, y: (y + 0.04) * s),
+                                       control: CGPoint(x: 0.5 * s, y: top * s))
                     }
-                    .stroke(.black, style: StrokeStyle(lineWidth: a.4 * s, lineCap: .round))
+                    .stroke(style: StrokeStyle(lineWidth: [0.07, 0.06, 0.05][i] * s, lineCap: .round))
                 }
             }
-    }
-
-    private func youTubeMusic(_ s: CGFloat) -> some View {
-        Circle()
-            .fill(Color(red: 1, green: 0, blue: 0))
-            .overlay {
-                Circle()
-                    .stroke(.white, lineWidth: s * 0.045)
-                    .frame(width: s * 0.56, height: s * 0.56)
+        case "YouTube Music":
+            ZStack {
+                Circle().stroke(lineWidth: s * 0.05).frame(width: s * 0.5, height: s * 0.5)
                 Path { p in
-                    p.move(to: CGPoint(x: 0.43 * s, y: 0.38 * s))
-                    p.addLine(to: CGPoint(x: 0.63 * s, y: 0.5 * s))
-                    p.addLine(to: CGPoint(x: 0.43 * s, y: 0.62 * s))
+                    p.move(to: CGPoint(x: 0.44 * s, y: 0.39 * s))
+                    p.addLine(to: CGPoint(x: 0.62 * s, y: 0.5 * s))
+                    p.addLine(to: CGPoint(x: 0.44 * s, y: 0.61 * s))
                     p.closeSubpath()
                 }
-                .fill(.white)
             }
+        default:
+            // Двойная нота Apple Music.
+            ZStack {
+                Path { p in
+                    p.move(to: CGPoint(x: 0.41 * s, y: 0.64 * s))
+                    p.addLine(to: CGPoint(x: 0.41 * s, y: 0.32 * s))
+                    p.addLine(to: CGPoint(x: 0.67 * s, y: 0.27 * s))
+                    p.addLine(to: CGPoint(x: 0.67 * s, y: 0.59 * s))
+                }
+                .stroke(style: StrokeStyle(lineWidth: s * 0.05, lineCap: .round, lineJoin: .round))
+                Ellipse().frame(width: s * 0.15, height: s * 0.115).rotationEffect(.degrees(-18))
+                    .position(x: 0.35 * s, y: 0.655 * s)
+                Ellipse().frame(width: s * 0.15, height: s * 0.115).rotationEffect(.degrees(-18))
+                    .position(x: 0.61 * s, y: 0.605 * s)
+            }
+        }
     }
 }

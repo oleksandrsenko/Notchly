@@ -8,6 +8,9 @@ struct AppNotification: Identifiable, Equatable {
     var subtitle: String
     var body: String
     var date: Date
+
+    /// Письма Gmail приходят не из приложения, а по IMAP.
+    static let gmailID = "com.google.Gmail"
 }
 
 /// Уведомления других приложений (Telegram, WhatsApp и т. д.) из базы Центра уведомлений macOS.
@@ -15,6 +18,8 @@ struct AppNotification: Identifiable, Equatable {
 final class SystemNotificationsReader: ObservableObject {
     @Published private(set) var notifications: [AppNotification] = []
     @Published private(set) var needsFullDiskAccess = false
+    /// Доступ есть, но базу прочитать не вышло (например, в новой macOS другая схема).
+    @Published private(set) var readError: String?
 
     /// Пришло новое уведомление — остров показывает его карточкой.
     var onNew: ((AppNotification) -> Void)?
@@ -102,7 +107,7 @@ final class SystemNotificationsReader: ObservableObject {
             (try? FileManager.default.attributesOfItem(atPath: $0))?[.modificationDate] as? Date
         }
         let newest = dates.max()
-        guard needsFullDiskAccess || newest != lastModified else { return }
+        guard needsFullDiskAccess || readError != nil || newest != lastModified else { return }
         lastModified = newest
         reload()
     }
@@ -113,10 +118,15 @@ final class SystemNotificationsReader: ObservableObject {
             let result = self.read()
             DispatchQueue.main.async {
                 switch result {
-                case .none:
+                case .noAccess:
                     self.needsFullDiskAccess = true
-                case .some(let items):
+                    self.readError = nil
+                case .failed(let message):
                     self.needsFullDiskAccess = false
+                    self.readError = message
+                case .items(let items):
+                    self.needsFullDiskAccess = false
+                    self.readError = nil
                     self.raw = items
                     self.announceNew(items)
                     self.applyFilter()
@@ -125,11 +135,45 @@ final class SystemNotificationsReader: ObservableObject {
         }
     }
 
-    private func read() -> [AppNotification]? {
+    enum ReadResult { case noAccess, failed(String), items([AppNotification]) }
+
+    /// Отчёт для `open DynamicIsland.app --args --notifications-selftest`: запуск через open,
+    /// чтобы действовал «Полный доступ к диску» самого приложения, а не Терминала.
+    func selfTestReport() -> String {
+        var lines = ["База: \(path)"]
+        lines.append("Файл существует: \(FileManager.default.fileExists(atPath: path))")
+        lines.append("Читается: \(FileHandle(forReadingAtPath: path) != nil)")
+        var db: OpaquePointer?
+        if sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK {
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table'", -1, &stmt, nil) == SQLITE_OK {
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    lines.append("Таблица: " + (sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? "?"))
+                }
+            } else {
+                lines.append("Ошибка SQLite: \(String(cString: sqlite3_errmsg(db)))")
+            }
+            sqlite3_finalize(stmt)
+        }
+        sqlite3_close(db)
+        switch read() {
+        case .noAccess: lines.append("Итог: нет доступа")
+        case .failed(let m): lines.append("Итог: ошибка — \(m)")
+        case .items(let items):
+            lines.append("Итог: прочитано уведомлений \(items.count)")
+            for item in items.prefix(5) { lines.append("  \(item.bundleID): \(item.title) — \(item.body.prefix(40))") }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func read() -> ReadResult {
+        // Без «Полного доступа к диску» файл даже не открывается на чтение.
+        guard FileHandle(forReadingAtPath: path) != nil else { return .noAccess }
         var db: OpaquePointer?
         guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            let message = String(cString: sqlite3_errmsg(db))
             sqlite3_close(db)
-            return nil
+            return .failed(message)
         }
         defer { sqlite3_close(db) }
 
@@ -139,7 +183,9 @@ final class SystemNotificationsReader: ObservableObject {
         ORDER BY record.delivered_date DESC LIMIT 300
         """
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return .failed("Не удалось прочитать базу уведомлений: \(String(cString: sqlite3_errmsg(db)))")
+        }
         defer { sqlite3_finalize(stmt) }
 
         var items: [AppNotification] = []
@@ -161,6 +207,6 @@ final class SystemNotificationsReader: ObservableObject {
                                          subtitle: req["subt"] as? String ?? "", body: body,
                                          date: Date(timeIntervalSinceReferenceDate: delivered)))
         }
-        return items
+        return .items(items)
     }
 }

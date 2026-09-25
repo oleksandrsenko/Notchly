@@ -10,7 +10,7 @@ struct HomeView: View {
     var body: some View {
         HStack(spacing: 18) {
             clock
-                .frame(width: 176, alignment: .leading)
+                .frame(width: 200, alignment: .leading)
                 .staggered(0)
 
             Rectangle()
@@ -40,10 +40,11 @@ struct HomeView: View {
                 Text(ctx.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "ru_RU"))).capitalizedFirst)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
-                Spacer(minLength: 8)
+                Spacer(minLength: 6)
                 nowPlayingChip
             }
-            .padding(.vertical, 4)
+            .padding(.top, 0)
+            .padding(.bottom, 2)
         }
     }
 
@@ -51,24 +52,24 @@ struct HomeView: View {
     private var nowPlayingChip: some View {
         if media.hasTrack {
             Button(action: openMusic) {
-                HStack(spacing: 8) {
-                    ArtworkView(image: media.artwork, accent: media.accent, cornerRadius: 5)
-                        .frame(width: 24, height: 24)
-                    VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    ArtworkView(image: media.artwork, accent: media.accent, cornerRadius: 8)
+                        .frame(width: 38, height: 38)
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(media.title)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         Text(media.artist)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.white.opacity(0.55))
                     }
                     .lineLimit(1)
                     Spacer(minLength: 0)
-                    EqualizerView(isPlaying: media.isPlaying, color: media.accent)
-                        .frame(width: 13, height: 10)
+                    EqualizerView(isPlaying: media.isPlaying, color: .white)
+                        .frame(width: 15, height: 12)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(0.07)))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(.white.opacity(0.07)))
             }
             .buttonStyle(PressableStyle())
             .transition(.blurFade)
@@ -236,20 +237,21 @@ private struct BatteryCarousel: View {
     private var macPage: some View {
         HStack(spacing: 12) {
             ZStack(alignment: .topTrailing) {
-                Image(systemName: "laptopcomputer")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.75)], startPoint: .top, endPoint: .bottom))
+                MacBookArt(width: 58)
                 if mac?.charging == true {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.green)
-                        .offset(x: 6, y: -4)
+                        .offset(x: 5, y: -6)
+                        .transition(.scale.combined(with: .opacity))
                 }
             }
             .frame(width: 60)
-            info(title: "MacBook", percent: mac?.percent, note: mac?.charging == true ? "Заряжается" : nil)
+            info(title: "MacBook", percent: mac?.percent, charging: mac?.charging == true,
+                 note: mac?.charging == true ? "Заряжается" : nil)
         }
         .padding(.horizontal, 14)
+        .animation(.smooth(duration: 0.4), value: mac?.charging)
     }
 
     private func accessoryPage(_ device: DeviceBattery) -> some View {
@@ -258,7 +260,8 @@ private struct BatteryCarousel: View {
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.75)], startPoint: .top, endPoint: .bottom))
                 .frame(width: 60)
-            info(title: device.name, percent: device.primaryLevel?.percent, note: nil)
+            info(title: device.name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression),
+                 percent: device.primaryLevel?.percent, note: nil)
         }
         .padding(.horizontal, 14)
     }
@@ -279,7 +282,7 @@ private struct BatteryCarousel: View {
                 }
             }
             .frame(width: 60)
-            info(title: "iPhone", percent: phone.percent, note: phone.charging ? "Заряжается · \(age)" : age)
+            info(title: "iPhone", percent: phone.percent, charging: phone.charging, note: phone.charging ? "Заряжается · \(age)" : age)
         }
         .padding(.horizontal, 14)
     }
@@ -297,7 +300,7 @@ private struct BatteryCarousel: View {
         .padding(.horizontal, 14)
     }
 
-    private func info(title: String, percent: Int?, note: String?) -> some View {
+    private func info(title: String, percent: Int?, charging: Bool = false, note: String?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
@@ -308,7 +311,9 @@ private struct BatteryCarousel: View {
                     Text("\(percent)%")
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                         .monospacedDigit()
-                    BatteryGlyph(percent: percent)
+                        .contentTransition(.numericText(value: Double(percent)))
+                        .animation(.smooth(duration: 0.6), value: percent)
+                    BatteryGlyph(percent: percent, charging: charging, width: 28)
                 }
             }
             if let note, !note.isEmpty {

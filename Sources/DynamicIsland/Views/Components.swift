@@ -138,12 +138,13 @@ struct PressableStyle: ButtonStyle {
     }
 }
 
-/// Горизонтальный слайдер в стиле Пункта управления.
+/// Горизонтальный слайдер в стиле Пункта управления. Заливка растёт непрерывно от нуля,
+/// иконка темнеет только когда её накрывает заливка — поэтому не пропадает на малых значениях.
 struct CapsuleSlider: View {
     var value: Double
     var icon: String
     var tint: Color = .white
-    var height: CGFloat = 40
+    var height: CGFloat = 34
     var iconAction: (() -> Void)?
     var onChange: (Double) -> Void
 
@@ -153,31 +154,30 @@ struct CapsuleSlider: View {
     var body: some View {
         GeometryReader { geo in
             let shown = dragValue ?? value
+            let fillWidth = geo.size.width * shown
+            let iconCovered = fillWidth > height * 0.62
             ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(hovering ? 0.16 : 0.12))
-                Capsule()
-                    .fill(tint)
-                    .frame(width: max(height, geo.size.width * shown))
-                    .opacity(shown > 0.001 ? 1 : 0.0)
+                Rectangle().fill(.white.opacity(hovering ? 0.15 : 0.11))
+                Rectangle()
+                    .fill(tint.opacity(0.88))
+                    .frame(width: fillWidth)
                 HStack {
                     Image(systemName: icon)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(shown > 0.08 ? Color.black : Color.white)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(iconCovered ? Color.black.opacity(0.75) : Color.white.opacity(0.85))
                         .frame(width: height, height: height)
                         .contentShape(Rectangle())
                         .onTapGesture { iconAction?() }
                     Spacer()
                     Text("\(Int((shown * 100).rounded()))%")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(shown > 0.9 ? .black.opacity(0.7) : .white.opacity(0.7))
-                        .padding(.trailing, 14)
-                        .contentTransition(.numericText())
+                        .foregroundStyle(fillWidth > geo.size.width - 44 ? .black.opacity(0.6) : .white.opacity(0.6))
+                        .padding(.trailing, 13)
                 }
             }
             .clipShape(Capsule())
-            .scaleEffect(dragValue != nil ? 1.02 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dragValue != nil)
+            .animation(.easeOut(duration: 0.15), value: iconCovered)
             .contentShape(Capsule())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { g in

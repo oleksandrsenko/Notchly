@@ -13,6 +13,7 @@ struct NotesView: View {
     @ObservedObject var tasks: TasksStore
     var gemini: GeminiAssistant
     @ViewState private var direction: Edge = .trailing
+    @ViewState private var richController = RichTextController()
     @FocusState private var editorFocused: Bool
     @ViewState private var mode: Mode = .notes
     @Namespace private var segmentNS
@@ -61,9 +62,14 @@ struct NotesView: View {
                 Spacer()
 
                 if mode == .notes {
+                    FormatBar(controller: richController)
+                        .transition(.opacity)
                     IconButton(systemName: "square.and.pencil", size: 12, padding: 5) {
                         store.create()
                         editorFocused = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            if let tv = richController.textView { tv.window?.makeFirstResponder(tv) }
+                        }
                     }
                     .foregroundStyle(.white.opacity(0.8))
                     .transition(.blurFade)
@@ -115,7 +121,7 @@ struct NotesView: View {
                             }
                         } onDelete: {
                             store.delete(note.id)
-                        }
+                        } onRename: { store.rename(note.id, to: $0) }
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
@@ -126,15 +132,14 @@ struct NotesView: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(.white.opacity(editorFocused ? 0.09 : 0.06))
                 if let id = store.selectedID {
-                    TextEditor(text: store.binding(for: id))
-                        .font(.system(size: 13))
-                        .scrollContentBackground(.hidden)
-                        .scrollIndicators(.never)
-                        .focused($editorFocused)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .id(id)
+                    RichTextEditor(initial: store.attributed(for: id), controller: richController) { value in
+                        store.updateRich(id, value)
+                    }
+                    .focused($editorFocused)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .id(id)
                     if store.selected?.text.isEmpty ?? true {
                         Text("Начните печатать…")
                             .font(.system(size: 13))
@@ -167,21 +172,55 @@ private struct NoteRow: View {
     var selected: Bool
     var onSelect: () -> Void
     var onDelete: () -> Void
+    var onRename: (String) -> Void
     @ViewState private var hovering = false
+    @ViewState private var renaming = false
+    @ViewState private var draft = ""
+    @FocusState private var focused: Bool
+
+    private func startRename() {
+        draft = note.title
+        renaming = true
+        DispatchQueue.main.async { focused = true }
+    }
+
+    private func commitRename() {
+        guard renaming else { return }
+        renaming = false
+        onRename(draft)
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(note.title)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.white.opacity(selected ? 1 : 0.75))
-                    .lineLimit(1)
+                if renaming {
+                    TextField("Название", text: $draft)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .focused($focused)
+                        .onSubmit(commitRename)
+                        .onExitCommand { renaming = false }
+                        .onChange(of: focused) { _, isFocused in if !isFocused { commitRename() } }
+                } else {
+                    Text(note.title)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.white.opacity(selected ? 1 : 0.75))
+                        .lineLimit(1)
+                }
                 Text(shortTimestamp(note.updatedAt))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.white.opacity(0.4))
             }
             Spacer(minLength: 0)
-            if hovering {
+            if hovering && !renaming {
+                Button(action: startRename) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .help("Переименовать")
+                .transition(.opacity)
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 10.5, weight: .medium))
@@ -196,7 +235,12 @@ private struct NoteRow: View {
         .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
             .fill(.white.opacity(selected ? 0.14 : (hovering ? 0.07 : 0))))
         .contentShape(Rectangle())
+        .onTapGesture(count: 2, perform: startRename)
         .onTapGesture(perform: onSelect)
+        .contextMenu {
+            Button("Переименовать", action: startRename)
+            Button("Удалить", role: .destructive, action: onDelete)
+        }
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
     }
 }

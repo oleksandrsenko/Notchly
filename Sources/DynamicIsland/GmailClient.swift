@@ -20,11 +20,14 @@ final class GmailClient: ObservableObject {
 
     private var timer: Timer?
     private static let accountKey = "gmail.account"
+    /// Новое непрочитанное письмо — остров показывает его карточкой.
+    var onNew: ((MailItem) -> Void)?
+    private var knownIDs: Set<String>?
 
     init() {
         account = UserDefaults.standard.string(forKey: Self.accountKey)
         if account != nil { refresh() }
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.refresh() }
+        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refresh() }
     }
 
     var isConnected: Bool { account != nil }
@@ -43,6 +46,7 @@ final class GmailClient: ObservableObject {
                     UserDefaults.standard.set(email, forKey: Self.accountKey)
                     self.account = email
                     self.mails = mails
+                    self.knownIDs = Set(mails.map(\.id))
                     self.isLoading = false
                 }
             } catch {
@@ -62,17 +66,50 @@ final class GmailClient: ObservableObject {
     }
 
     func refresh() {
-        guard let account, !isLoading,
-              let data = Keychain.data(service: "gmail", account: account),
-              let password = String(data: data, encoding: .utf8) else { return }
+        guard let account, !isLoading else { return }
+        guard let data = Keychain.data(service: "gmail", account: account),
+              let password = String(data: data, encoding: .utf8) else {
+            // Обычно после пересборки без постоянной подписи: Связка ключей не отдаёт пароль новой сборке.
+            error = "Нет доступа к паролю в Связке ключей — отключите и подключите Gmail заново"
+            return
+        }
         isLoading = true
         Task {
-            let result = try? await Self.fetchUnread(email: account, password: password)
-            await MainActor.run {
-                if let result, result != self.mails { self.mails = result }
-                self.error = result == nil ? "Не удалось обновить почту" : nil
-                self.isLoading = false
+            let result = try? await Self.withTimeout(seconds: 25) {
+                try await Self.fetchUnread(email: account, password: password)
             }
+            await MainActor.run {
+                self.isLoading = false
+                guard let result else {
+                    self.error = "Не удалось обновить почту"
+                    return
+                }
+                self.error = nil
+                self.announceNew(result)
+                if result != self.mails { self.mails = result }
+            }
+        }
+    }
+
+    private func announceNew(_ mails: [MailItem]) {
+        let ids = Set(mails.map(\.id))
+        defer { knownIDs = (knownIDs ?? []).union(ids) }
+        // Первая загрузка — это старые письма, их не показываем.
+        guard let known = knownIDs,
+              let fresh = mails.filter({ !known.contains($0.id) }).max(by: { $0.date < $1.date }) else { return }
+        onNew?(fresh)
+    }
+
+    private static func withTimeout<T: Sendable>(seconds: Double, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw IMAPError(message: "Gmail не ответил вовремя")
+            }
+            let value = try await group.next()!
+            group.cancelAll()
+            return value
         }
     }
 

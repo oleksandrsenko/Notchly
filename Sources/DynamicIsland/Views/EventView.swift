@@ -41,7 +41,13 @@ private struct NotificationEvent: View {
     var body: some View {
         HStack(spacing: 12) {
             Group {
-                if let url = appURL {
+                if item.bundleID == AppNotification.gmailID {
+                    Image(systemName: "envelope.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.red.gradient))
+                } else if let url = appURL {
                     Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
                 } else {
                     Image(systemName: "app.badge.fill").font(.system(size: 26)).foregroundStyle(.white.opacity(0.6))
@@ -220,27 +226,52 @@ private struct DeviceSheet: View {
 }
 
 /// Маленькая батарейка, которая заполняется при появлении.
+/// Значок батареи. Во время зарядки заливка плавно дорастает до текущего процента,
+/// а по ней мягко пробегает световая волна — как на iPhone.
 struct BatteryGlyph: View {
     var percent: Int
+    var charging = false
+    var width: CGFloat = 24
     @ViewState private var fill: CGFloat = 0
+
+    private var height: CGFloat { width * 0.46 }
+    private var color: Color { charging ? .green : percent <= 20 ? .red : .green }
 
     var body: some View {
         HStack(spacing: 1) {
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3).stroke(.white.opacity(0.45), lineWidth: 1)
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(percent <= 20 ? Color.red : Color.green)
-                    .frame(width: max(2, 18 * fill))
+                RoundedRectangle(cornerRadius: height * 0.3, style: .continuous)
+                    .stroke(.white.opacity(0.45), lineWidth: 1)
+                let inner = width - 4
+                RoundedRectangle(cornerRadius: height * 0.16, style: .continuous)
+                    .fill(color)
+                    .frame(width: max(2, inner * fill))
+                    .overlay {
+                        if charging {
+                            TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in
+                                let t = ctx.date.timeIntervalSinceReferenceDate
+                                let phase = CGFloat((t / 2.2).truncatingRemainder(dividingBy: 1))
+                                LinearGradient(colors: [.clear, .white.opacity(0.55), .clear],
+                                               startPoint: .leading, endPoint: .trailing)
+                                    .frame(width: inner * 0.45)
+                                    .offset(x: -inner * 0.45 + phase * inner * 1.45)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: height * 0.16, style: .continuous))
+                            .transition(.opacity)
+                        }
+                    }
                     .padding(2)
             }
-            .frame(width: 24, height: 11)
-            RoundedRectangle(cornerRadius: 1).fill(.white.opacity(0.45)).frame(width: 1.5, height: 4)
+            .frame(width: width, height: height)
+            RoundedRectangle(cornerRadius: 1).fill(.white.opacity(0.45)).frame(width: 1.5, height: height * 0.38)
         }
         .onAppear {
-            withAnimation(.smooth(duration: 0.8).delay(0.2)) { fill = CGFloat(percent) / 100 }
+            withAnimation(.smooth(duration: 1.2).delay(0.2)) { fill = CGFloat(percent) / 100 }
         }
         .onChange(of: percent) { _, value in
-            withAnimation(.smooth(duration: 0.5)) { fill = CGFloat(value) / 100 }
+            withAnimation(.smooth(duration: 1.0)) { fill = CGFloat(value) / 100 }
         }
+        .animation(.easeInOut(duration: 0.4), value: charging)
     }
 }

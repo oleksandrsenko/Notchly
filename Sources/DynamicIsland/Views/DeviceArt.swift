@@ -189,3 +189,53 @@ private struct SymbolArt: View {
         }
     }
 }
+
+/// MacBook спереди в цвете Midnight: тёмно-синий корпус, чёрная рамка, экран с обоями и вырезом.
+struct MacBookArt: View {
+    var width: CGFloat
+
+    static let midnight = [Color(red: 0.20, green: 0.23, blue: 0.29), Color(red: 0.12, green: 0.14, blue: 0.19)]
+
+    var body: some View {
+        let w = width
+        let lidW = w * 0.84, lidH = w * 0.56
+        VStack(spacing: 0) {
+            ZStack(alignment: .top) {
+                // Кромка крышки цвета Midnight.
+                UnevenRoundedRectangle(topLeadingRadius: w * 0.06, topTrailingRadius: w * 0.06, style: .continuous)
+                    .fill(LinearGradient(colors: Self.midnight, startPoint: .top, endPoint: .bottom))
+                // Чёрная рамка экрана.
+                UnevenRoundedRectangle(topLeadingRadius: w * 0.05, topTrailingRadius: w * 0.05, style: .continuous)
+                    .fill(Color.black)
+                    .padding([.top, .horizontal], w * 0.012)
+                // Экран с обоями.
+                RoundedRectangle(cornerRadius: w * 0.025, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(red: 0.16, green: 0.24, blue: 0.55),
+                                                  Color(red: 0.38, green: 0.26, blue: 0.62),
+                                                  Color(red: 0.07, green: 0.10, blue: 0.22)],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .padding(.horizontal, w * 0.035)
+                    .padding(.top, w * 0.035)
+                    .padding(.bottom, w * 0.02)
+                // Вырез камеры.
+                UnevenRoundedRectangle(bottomLeadingRadius: w * 0.012, bottomTrailingRadius: w * 0.012)
+                    .fill(Color.black)
+                    .frame(width: w * 0.13, height: w * 0.028)
+                    .padding(.top, w * 0.035)
+            }
+            .frame(width: lidW, height: lidH)
+
+            // Нижняя часть корпуса с выемкой для открытия крышки.
+            ZStack(alignment: .top) {
+                UnevenRoundedRectangle(bottomLeadingRadius: w * 0.03, bottomTrailingRadius: w * 0.03, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(red: 0.30, green: 0.34, blue: 0.41), Self.midnight[1]],
+                                         startPoint: .top, endPoint: .bottom))
+                UnevenRoundedRectangle(bottomLeadingRadius: w * 0.02, bottomTrailingRadius: w * 0.02)
+                    .fill(Self.midnight[1].opacity(0.9))
+                    .frame(width: w * 0.16, height: w * 0.018)
+            }
+            .frame(width: w, height: w * 0.05)
+        }
+        .frame(width: w)
+    }
+}
