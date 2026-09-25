@@ -5,6 +5,33 @@ import SwiftUI
 final class RichTextController: ObservableObject {
     weak var textView: NSTextView?
 
+    /// Что включено под курсором (или в начале выделения) — кнопки панели подсвечиваются белым.
+    @Published private(set) var isBold = false
+    @Published private(set) var isItalic = false
+    @Published private(set) var isStrikethrough = false
+
+    /// Пересчитывает состояние кнопок. Отложено на следующий такт: вызывается из колбэков NSTextView,
+    /// которые могут прийти посреди обновления SwiftUI.
+    func refreshState() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let tv = self.textView else { return }
+            let range = tv.selectedRange()
+            let attrs: [NSAttributedString.Key: Any]
+            if range.length > 0, let storage = tv.textStorage, range.location < storage.length {
+                attrs = storage.attributes(at: range.location, effectiveRange: nil)
+            } else {
+                attrs = tv.typingAttributes
+            }
+            let traits = (attrs[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
+            let bold = traits.contains(.boldFontMask)
+            let italic = traits.contains(.italicFontMask)
+            let strike = (attrs[.strikethroughStyle] as? Int ?? 0) != 0
+            if bold != self.isBold { self.isBold = bold }
+            if italic != self.isItalic { self.isItalic = italic }
+            if strike != self.isStrikethrough { self.isStrikethrough = strike }
+        }
+    }
+
     static let baseSize: CGFloat = 13
     static let sizes: [(title: String, size: CGFloat)] = [("Мелкий", 11), ("Обычный", 13), ("Крупный", 17), ("Заголовок", 22)]
 
@@ -44,6 +71,7 @@ final class RichTextController: ObservableObject {
     private func apply(_ change: ([NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any]) {
         guard let tv = textView, let storage = tv.textStorage else { return }
         let range = tv.selectedRange()
+        defer { refreshState() }
         if range.length == 0 {
             tv.typingAttributes.merge(change(tv.typingAttributes)) { $1 }
             return
@@ -84,6 +112,8 @@ struct RichTextEditor: NSViewRepresentable {
         tv.textStorage?.setAttributedString(initial)
         tv.delegate = context.coordinator
         controller.textView = tv
+        context.coordinator.controller = controller
+        controller.refreshState()
         return scroll
     }
 
@@ -95,26 +125,32 @@ struct RichTextEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var onChange: (NSAttributedString) -> Void
+        weak var controller: RichTextController?
         init(onChange: @escaping (NSAttributedString) -> Void) { self.onChange = onChange }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            controller?.refreshState()
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView, let storage = tv.textStorage else { return }
             // После удаления всего текста возвращаем обычный шрифт, а не последний использованный.
             if storage.length == 0 { tv.typingAttributes = RichTextEditor.defaultAttributes }
             onChange(NSAttributedString(attributedString: storage))
+            controller?.refreshState()
         }
     }
 }
 
 /// Панель форматирования над заметкой.
 struct FormatBar: View {
-    var controller: RichTextController
+    @ObservedObject var controller: RichTextController
 
     var body: some View {
         HStack(spacing: 2) {
-            button("bold", "Жирный") { controller.toggleBold() }
-            button("italic", "Курсив") { controller.toggleItalic() }
-            button("strikethrough", "Зачёркнутый") { controller.toggleStrikethrough() }
+            button("bold", "Жирный", active: controller.isBold) { controller.toggleBold() }
+            button("italic", "Курсив", active: controller.isItalic) { controller.toggleItalic() }
+            button("strikethrough", "Зачёркнутый", active: controller.isStrikethrough) { controller.toggleStrikethrough() }
             Menu {
                 ForEach(RichTextController.sizes, id: \.size) { item in
                     Button(item.title) { controller.setSize(item.size) }
@@ -135,13 +171,16 @@ struct FormatBar: View {
         .background(Capsule().fill(.white.opacity(0.07)))
     }
 
-    private func button(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
+    private func button(_ symbol: String, _ help: String, active: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.75))
+                // Включено — белая капсула с чёрным значком, как у выбранной вкладки.
+                .foregroundStyle(active ? .black : .white.opacity(0.75))
                 .frame(width: 24, height: 20)
+                .background(Capsule().fill(active ? Color.white : Color.clear))
                 .contentShape(Rectangle())
+                .animation(.easeOut(duration: 0.15), value: active)
         }
         .buttonStyle(PressableStyle())
         .help(help)

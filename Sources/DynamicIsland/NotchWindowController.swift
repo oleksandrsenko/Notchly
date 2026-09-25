@@ -23,6 +23,27 @@ final class NotchPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// У приложения без Dock нет меню «Правка», поэтому ⌘C / ⌘V и прочие сочетания сами никуда не доходят.
+    /// Отправляем стандартные команды текущему полю ввода (заметка, задача, поиск). Смотрим на физическую
+    /// клавишу, а не на символ — так сочетания работают и в русской раскладке.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown else { return super.performKeyEquivalent(with: event) }
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let action: Selector?
+        switch (event.keyCode, flags) {
+        case (7, [.command]): action = #selector(NSText.cut(_:))                 // X
+        case (8, [.command]): action = #selector(NSText.copy(_:))                // C
+        case (9, [.command]): action = #selector(NSText.paste(_:))               // V
+        case (9, [.command, .shift, .option]): action = #selector(NSTextView.pasteAsPlainText(_:))
+        case (0, [.command]): action = #selector(NSText.selectAll(_:))           // A
+        case (6, [.command]): action = Selector(("undo:"))                       // Z
+        case (6, [.command, .shift]): action = Selector(("redo:"))
+        default: action = nil
+        }
+        if let action, NSApp.sendAction(action, to: nil, from: self) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
 }
 
 final class NotchWindowController {

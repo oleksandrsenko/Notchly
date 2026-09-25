@@ -6,8 +6,8 @@ enum IslandTab: String, CaseIterable, Identifiable {
     case home, music, shelf, notes, controls, notifications
     var id: String { rawValue }
 
-    /// Вкладки в шапке. Уведомления открываются колокольчиком справа.
-    static let bar: [IslandTab] = [.home, .music, .shelf, .notes, .controls]
+    /// Вкладки в шапке слева. Справа, рядом с колокольчиком, — «Управление» (громкость и яркость).
+    static let bar: [IslandTab] = [.home, .music, .shelf, .notes]
 
     var icon: String {
         switch self {

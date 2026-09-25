@@ -21,14 +21,16 @@ struct NotesView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                HStack(spacing: 2) {
+                // Каждый раздел — отдельная капсула с промежутком: «Задачи» стоят отдельно, посередине.
+                HStack(spacing: 8) {
                     ForEach(Mode.segments, id: \.self) { item in
                         Button { switchTo(item) } label: {
                             Text(item.rawValue)
                                 .font(.system(size: 11.5, weight: .semibold))
                                 .foregroundStyle(mode == item ? .black : .white.opacity(0.6))
-                                .padding(.horizontal, 10)
-                                .frame(height: 22)
+                                .padding(.horizontal, 11)
+                                .frame(height: 24)
+                                .background(Capsule().fill(.white.opacity(0.08)))
                                 .background {
                                     if mode == item {
                                         Capsule().fill(.white).matchedGeometryEffect(id: "segment", in: segmentNS)
@@ -39,8 +41,6 @@ struct NotesView: View {
                         .buttonStyle(PressableStyle())
                     }
                 }
-                .padding(2)
-                .background(Capsule().fill(.white.opacity(0.08)))
 
                 // Кнопка ключей «выезжает» рядом, когда открыт буфер обмена.
                 if mode == .clipboard || mode == .vault {

@@ -48,6 +48,9 @@ struct ExpandedIslandView: View {
             .padding(.leading, 16)
             Spacer(minLength: model.notchSize.width + 20)
             HStack(spacing: 8) {
+                TabButton(tab: .controls, selected: model.tab == .controls, badge: 0, ns: tabNS) {
+                    select(model.tab == .controls ? .home : .controls)
+                }
                 NotificationBell(model: model, gmail: model.gmail, system: model.systemNotifications) {
                     select(model.tab == .notifications ? .home : .notifications)
                 }
