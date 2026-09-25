@@ -12,6 +12,8 @@ struct DeviceArt: View {
             else if n.contains("airpods") && !n.contains("max") { self = .airPods }
             else { self = .symbol(device.symbol) }
         }
+
+        var isPro: Bool { if case .airPodsPro = self { return true } else { return false } }
     }
 
     var kind: Kind

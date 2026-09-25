@@ -51,10 +51,14 @@ enum Snapshots {
         model.peek = true; shot("2-peek"); model.peek = false
         model.hud = HUDState(kind: .volume, value: 0.6); shot("3-hud"); model.hud = nil
         model.eventExpanded = true; model.event = .charging(BatteryInfo(percent: 82, charging: true, onAC: true)); shot("7-charging")
+        model.event = .device(DeviceBattery(name: "AirPods Pro (Alexander)", symbol: "airpodspro", levels: [
+            .init(label: "Левый", symbol: "airpod.left", percent: 100, charging: true),
+            .init(label: "Правый", symbol: "airpod.right", percent: 100, charging: true),
+            .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 20)])); shot("8-airpods")
         model.event = .device(DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
             .init(label: "Левый", symbol: "airpod.left", percent: 100),
-            .init(label: "Правый", symbol: "airpod.right", percent: 95),
-            .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 40)])); shot("8-airpods")
+            .init(label: "Правый", symbol: "airpod.right", percent: 64),
+            .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 40)])); shot("8-airpods-split")
         model.event = .device(DeviceBattery(name: "AirPods Max", symbol: "airpodsmax", levels: [
             .init(label: "", symbol: "", percent: 64)])); shot("9-max")
         model.event = .notification(AppNotification(id: "1", bundleID: "ru.keepcoder.Telegram", title: "Мама",

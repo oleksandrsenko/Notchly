@@ -201,12 +201,44 @@ private struct DeviceSheet: View {
     var device: DeviceBattery
     var onClose: () -> Void
     @ViewState private var appeared = false
-    @ViewState private var lidOpen: CGFloat = 0
-    @ViewState private var detailsShown = false
 
     /// «AirPods Max (Alexander)» → «AirPods Max», как на iPhone.
     private var title: String {
         device.name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
+    }
+
+    private struct Column: Identifiable {
+        enum Art { case pair(pro: Bool), bud(pro: Bool, mirrored: Bool), chargingCase(DeviceArt.Kind), headphones }
+        var id: String
+        var art: Art
+        var level: DeviceBattery.Level?
+    }
+
+    /// Как на iPhone: наушники вместе (если заряд одинаковый) или по отдельности, и кейс.
+    private var columns: [Column] {
+        let kind = DeviceArt.Kind(device: device)
+        let pro: Bool
+        switch kind {
+        case .airPodsPro: pro = true
+        case .airPods: pro = false
+        case .symbol: return [Column(id: "main", art: .headphones, level: device.primaryLevel)]
+        }
+        let left = device.levels.first { $0.label == "Левый" }
+        let right = device.levels.first { $0.label == "Правый" }
+        let casing = device.levels.first { $0.label == "Кейс" }
+        var result: [Column] = []
+        if let left, let right, left.percent != right.percent {
+            result.append(Column(id: "L", art: .bud(pro: pro, mirrored: false), level: left))
+            result.append(Column(id: "R", art: .bud(pro: pro, mirrored: true), level: right))
+        } else if let bud = [left, right].compactMap({ $0 }).min(by: { $0.percent < $1.percent }) {
+            var level = bud
+            level.charging = (left?.charging ?? false) || (right?.charging ?? false)
+            result.append(Column(id: "buds", art: .pair(pro: pro), level: level))
+        } else {
+            result.append(Column(id: "buds", art: .pair(pro: pro), level: nil))
+        }
+        result.append(Column(id: "case", art: .chargingCase(kind), level: casing))
+        return result
     }
 
     var body: some View {
@@ -230,58 +262,49 @@ private struct DeviceSheet: View {
             }
             .opacity(appeared ? 1 : 0)
 
-            DeviceArt(kind: DeviceArt.Kind(device: device), open: lidOpen, width: 150)
-                .frame(height: 118)
-                .opacity(appeared ? 1 : 0)
-                .scaleEffect(appeared ? 1 : 0.94)
+            Spacer(minLength: 6)
 
-            batteryRow
-                .opacity(detailsShown ? 1 : 0)
-
-            Spacer(minLength: 10)
-
-            Button(action: onClose) {
-                Text("Готово")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: 260)
-                    .frame(height: 36)
-                    .background(Capsule().fill(Color(red: 0.2, green: 0.47, blue: 1)))
-            }
-            .buttonStyle(PressableStyle())
-            .opacity(detailsShown ? 1 : 0)
-        }
-        .onAppear {
-            withAnimation(.smooth(duration: 0.4).delay(0.12)) { appeared = true }
-            // Как на iPhone: сначала кейс, затем плавно открывается крышка.
-            withAnimation(.easeInOut(duration: 0.7).delay(0.45)) { lidOpen = 1 }
-            withAnimation(.smooth(duration: 0.4).delay(0.75)) { detailsShown = true }
-        }
-    }
-
-    @ViewBuilder
-    private var batteryRow: some View {
-        if device.levels.isEmpty {
-            Text("Подключено")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.55))
-        } else {
-            HStack(spacing: 18) {
-                ForEach(device.levels) { level in
-                    HStack(spacing: 6) {
-                        Image(systemName: level.symbol.isEmpty ? device.symbol : level.symbol)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .frame(width: 18)
-                            .help(level.label)
-                        BatteryGlyph(percent: level.percent)
-                        Text("\(level.percent)%")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.white.opacity(0.85))
+            let columns = columns
+            HStack(alignment: .bottom, spacing: columns.count > 2 ? 26 : 44) {
+                ForEach(Array(columns.enumerated()), id: \.element.id) { index, column in
+                    VStack(spacing: 8) {
+                        art(column.art)
+                            .frame(height: 86)
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 8)
+                            .animation(.smooth(duration: 0.5).delay(0.15 + Double(index) * 0.08), value: appeared)
+                        if let level = column.level {
+                            ChargeRing(percent: level.percent, charging: level.charging, size: 28)
+                            Text("\(level.percent) %")
+                                .font(.system(size: 15, weight: .medium, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(.white.opacity(0.9))
+                        } else {
+                            Text("Подключено")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.55))
+                        }
                     }
                 }
             }
+        }
+        .onAppear { withAnimation(.smooth(duration: 0.4).delay(0.12)) { appeared = true } }
+    }
+
+    @ViewBuilder
+    private func art(_ art: Column.Art) -> some View {
+        switch art {
+        case .pair(let pro):
+            EarbudPair(pro: pro, height: 86)
+        case .bud(let pro, let mirrored):
+            EarbudArt(pro: pro)
+                .scaleEffect(x: mirrored ? -1 : 1, y: 1)
+                .scaleEffect(86 / 92)
+                .frame(width: 56, height: 86)
+        case .chargingCase(let kind):
+            DeviceArt(kind: kind, open: 0, width: 98)
+        case .headphones:
+            DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 98)
         }
     }
 }

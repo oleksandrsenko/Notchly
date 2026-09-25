@@ -294,7 +294,7 @@ private struct BatteryCarousel: View {
         let name = device.name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
         let parts = device.levels.filter { !$0.label.isEmpty }
         return HStack(spacing: 10) {
-            DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 50)
+            headphonesArt(device)
             if parts.count > 1 {
                 // Наушники с кейсом: левый, правый и кейс — каждый со своим зарядом, в одной карточке.
                 VStack(alignment: .leading, spacing: 5) {
@@ -326,10 +326,24 @@ private struct BatteryCarousel: View {
             .foregroundStyle(.white.opacity(0.4))
     }
 
-    /// Цвет заряда: 100% — зелёный, к 20% плавно переходит в красный, ниже 20% — красный.
-    static func levelColor(_ percent: Int) -> Color {
-        let t = min(max(Double(percent - 20) / 80, 0), 1)
-        return Color(hue: 0.33 * t, saturation: 0.72, brightness: 0.95)
+    static func levelColor(_ percent: Int) -> Color { BatteryTint.color(percent) }
+
+    /// Для AirPods — пара наушников на фоне кейса, как на фото; для остальных — обычный рисунок.
+    @ViewBuilder
+    private func headphonesArt(_ device: DeviceBattery) -> some View {
+        switch DeviceArt.Kind(device: device) {
+        case .airPodsPro, .airPods:
+            let pro = DeviceArt.Kind(device: device).isPro
+            ZStack(alignment: .bottomLeading) {
+                DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 40)
+                    .frame(width: 54, height: 48, alignment: .bottomTrailing)
+                EarbudPair(pro: pro, height: 38)
+                    .offset(x: -4, y: 2)
+            }
+            .frame(width: 54, height: 48)
+        case .symbol:
+            DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 50)
+        }
     }
 
     /// Один наушник или кейс: подпись и крупный процент, как у MacBook.

@@ -54,6 +54,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 
     private var timer: Timer?
     private var loading = false
+    /// Кто ждёт окончания текущего обновления (например, окно подключения наушников).
+    private var pendingCompletions: [() -> Void] = []
     private var wasOnAC: Bool?
     private var connectNotification: IOBluetoothUserNotification?
     private let startedAt = Date()
@@ -80,7 +82,11 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 
     func refresh(completion: (() -> Void)? = nil) {
         mac = BatteryInfo.read()
-        guard !loading else { return }
+        // Обновление уже идёт — не теряем колбэк, а вызываем его, когда оно закончится.
+        guard !loading else {
+            if let completion { pendingCompletions.append(completion) }
+            return
+        }
         loading = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let devices = Self.readBluetooth()
@@ -90,6 +96,9 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
                 if self?.devices != devices { self?.devices = devices }
                 if self?.phone != phone { self?.phone = phone }
                 completion?()
+                let pending = self?.pendingCompletions ?? []
+                self?.pendingCompletions = []
+                pending.forEach { $0() }
             }
         }
     }
@@ -118,8 +127,11 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     @objc private func deviceConnected(_ note: IOBluetoothUserNotification, fromDevice device: IOBluetoothDevice) {
         // При запуске система сообщает обо всех уже подключённых устройствах — их пропускаем.
         guard Date().timeIntervalSince(startedAt) > 5 else { return }
-        guard device.deviceClassMajor == kBluetoothDeviceClassMajorAudio else { return }
         let name = device.name ?? "Наушники"
+        // Класс «аудио» сообщают не все: у AirPods Max он бывает другим, поэтому смотрим и на имя.
+        let lower = name.lowercased()
+        let looksLikeHeadphones = ["airpods", "beats", "headphone", "наушник", "buds"].contains { lower.contains($0) }
+        guard device.deviceClassMajor == kBluetoothDeviceClassMajorAudio || looksLikeHeadphones else { return }
         // Заряд появляется в системе не сразу после подключения.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.refresh {
