@@ -284,7 +284,18 @@ final class MediaController: ObservableObject {
         case .set(let image): setArtwork(image)
         }
         updateLiveActivity()
-        if changed && !title.isEmpty { onTrackChange?() }
+        if changed && !title.isEmpty {
+            onTrackChange?()
+            // Если плеер не пришлёт обложку за секунду — ищем её в iTunes.
+            let id = newID
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                guard let self, self.trackID == id, self.artwork == nil else { return }
+                RemoteImages.artwork(title: self.title, artist: self.artist) { [weak self] image in
+                    guard let self, let image, self.trackID == id, self.artwork == nil else { return }
+                    self.setArtwork(image)
+                }
+            }
+        }
     }
 
     private func setArtwork(_ image: NSImage?) {

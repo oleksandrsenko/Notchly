@@ -51,28 +51,28 @@ struct HUDView: View {
     var state: HUDState
     var notchWidth: CGFloat
 
-    private var icon: String {
-        switch state.kind {
-        case .brightness:
-            return state.value < 0.33 ? "sun.min.fill" : "sun.max.fill"
-        case .volume:
-            if state.muted || state.value < 0.01 { return "speaker.slash.fill" }
-            if state.value < 0.33 { return "speaker.wave.1.fill" }
-            if state.value < 0.66 { return "speaker.wave.2.fill" }
-            return "speaker.wave.3.fill"
-        }
-    }
+    private var isSilent: Bool { state.kind == .volume && (state.muted || state.value < 0.01) }
 
     var body: some View {
         let shown = state.muted ? 0 : CGFloat(state.value)
         HStack(spacing: 0) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.bounce, value: state.value)
-                .frame(width: 26)
-                .padding(.leading, 14)
+            // Одна и та же иконка с «переменным значением»: дуги загораются плавно,
+            // без замены символа на каждом шаге.
+            ZStack {
+                if isSilent {
+                    Image(systemName: "speaker.slash.fill")
+                        .transition(.scale(scale: 0.7).combined(with: .opacity))
+                } else {
+                    Image(systemName: state.kind == .volume ? "speaker.wave.3.fill" : "sun.max.fill",
+                          variableValue: Double(state.value))
+                        .transition(.scale(scale: 0.7).combined(with: .opacity))
+                }
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 26, alignment: .leading)
+            .padding(.leading, 14)
+            .animation(.smooth(duration: 0.25), value: isSilent)
             Spacer(minLength: notchWidth)
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.18))
@@ -82,7 +82,7 @@ struct HUDView: View {
             }
             .frame(width: 48, height: 5)
             .padding(.trailing, 14)
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: shown)
+            .animation(.smooth(duration: 0.22), value: shown)
         }
         .frame(maxHeight: .infinity)
     }

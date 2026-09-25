@@ -1,4 +1,5 @@
 import Foundation
+import IOBluetooth
 import IOKit.ps
 
 struct DeviceBattery: Identifiable, Equatable {
@@ -16,20 +17,34 @@ struct DeviceBattery: Identifiable, Equatable {
     var levels: [Level]
 }
 
-/// Заряд Mac и подключённых Bluetooth-устройств (AirPods, наушники, мышь, клавиатура).
-final class DeviceBatteryMonitor: ObservableObject {
+/// Заряд Mac и подключённых Bluetooth-устройств (AirPods, наушники, мышь, клавиатура),
+/// а также события «подключили зарядку» и «подключили наушники».
+final class DeviceBatteryMonitor: NSObject, ObservableObject {
     @Published private(set) var mac: BatteryInfo?
     @Published private(set) var devices: [DeviceBattery] = []
 
+    var onChargerConnected: ((BatteryInfo) -> Void)?
+    var onAudioDeviceConnected: ((DeviceBattery) -> Void)?
+
     private var timer: Timer?
     private var loading = false
+    private var wasOnAC: Bool?
+    private var connectNotification: IOBluetoothUserNotification?
+    private let startedAt = Date()
 
-    init() {
+    override init() {
+        super.init()
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refresh() }
+        startPowerNotifications()
+        // Без описания доступа в Info.plist (запуск вне .app) macOS аварийно завершит процесс.
+        if Bundle.main.object(forInfoDictionaryKey: "NSBluetoothAlwaysUsageDescription") != nil {
+            connectNotification = IOBluetoothDevice.register(forConnectNotifications: self,
+                                                             selector: #selector(deviceConnected(_:fromDevice:)))
+        }
     }
 
-    func refresh() {
+    func refresh(completion: (() -> Void)? = nil) {
         mac = BatteryInfo.read()
         guard !loading else { return }
         loading = true
@@ -38,6 +53,45 @@ final class DeviceBatteryMonitor: ObservableObject {
             DispatchQueue.main.async {
                 self?.loading = false
                 if self?.devices != devices { self?.devices = devices }
+                completion?()
+            }
+        }
+    }
+
+    // MARK: - Зарядка
+
+    private func startPowerNotifications() {
+        wasOnAC = BatteryInfo.read()?.onAC
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        guard let source = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            Unmanaged<DeviceBatteryMonitor>.fromOpaque(context).takeUnretainedValue().powerChanged()
+        }, context)?.takeRetainedValue() else { return }
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+    }
+
+    private func powerChanged() {
+        guard let info = BatteryInfo.read() else { return }
+        mac = info
+        if info.onAC && wasOnAC == false { onChargerConnected?(info) }
+        wasOnAC = info.onAC
+    }
+
+    // MARK: - Наушники
+
+    @objc private func deviceConnected(_ note: IOBluetoothUserNotification, fromDevice device: IOBluetoothDevice) {
+        // При запуске система сообщает обо всех уже подключённых устройствах — их пропускаем.
+        guard Date().timeIntervalSince(startedAt) > 5 else { return }
+        guard device.deviceClassMajor == kBluetoothDeviceClassMajorAudio else { return }
+        let name = device.name ?? "Наушники"
+        // Заряд появляется в системе не сразу после подключения.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.refresh {
+                guard let self else { return }
+                let device = self.devices.first { $0.name == name }
+                    ?? DeviceBattery(name: name, symbol: Self.symbol(for: name, info: ["device_minorType": "Headphones"]),
+                                     levels: [])
+                self.onAudioDeviceConnected?(device)
             }
         }
     }
@@ -86,7 +140,7 @@ final class DeviceBatteryMonitor: ObservableObject {
         }
     }
 
-    private static func symbol(for name: String, info: [String: Any]) -> String {
+    static func symbol(for name: String, info: [String: Any]) -> String {
         let lower = name.lowercased()
         if lower.contains("airpods max") { return "airpodsmax" }
         if lower.contains("airpods pro") { return "airpodspro" }

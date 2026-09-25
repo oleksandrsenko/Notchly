@@ -127,17 +127,21 @@ private struct EmptyPlayerView: View {
         var id: String { name }
         var name: String
         var bundleIDs: [String]
+        /// Bundle id iOS-версии: по нему иконка подтягивается из App Store, если приложения нет на Mac.
+        var storeBundleID: String?
         var web: URL?
         var fallbackSymbol: String
     }
 
     private let services = [
-        Service(name: "Apple Music", bundleIDs: ["com.apple.Music"], web: nil, fallbackSymbol: "music.note"),
-        Service(name: "Spotify", bundleIDs: ["com.spotify.client"],
+        Service(name: "Apple Music", bundleIDs: ["com.apple.Music"], storeBundleID: nil, web: nil, fallbackSymbol: "music.note"),
+        Service(name: "Spotify", bundleIDs: ["com.spotify.client"], storeBundleID: "com.spotify.client",
                 web: URL(string: "https://open.spotify.com"), fallbackSymbol: "dot.radiowaves.left.and.right"),
         Service(name: "Яндекс Музыка", bundleIDs: ["ru.yandex.desktop.music", "ru.yandex.music"],
+                storeBundleID: "ru.yandex.mobile.music",
                 web: URL(string: "https://music.yandex.ru"), fallbackSymbol: "headphones"),
         Service(name: "YouTube Music", bundleIDs: ["com.github.th-ch.youtube-music", "com.github.th-ch.pear-desktop"],
+                storeBundleID: "com.google.ios.youtubemusic",
                 web: URL(string: "https://music.youtube.com"), fallbackSymbol: "play.rectangle.fill"),
     ]
 
@@ -152,7 +156,8 @@ private struct EmptyPlayerView: View {
             }
             HStack(spacing: 12) {
                 ForEach(services) { service in
-                    ServiceButton(name: service.name, icon: icon(for: service), symbol: service.fallbackSymbol) {
+                    ServiceButton(name: service.name, icon: icon(for: service), storeBundleID: service.storeBundleID,
+                                  symbol: service.fallbackSymbol) {
                         open(service)
                     }
                 }
@@ -181,9 +186,11 @@ private struct EmptyPlayerView: View {
 private struct ServiceButton: View {
     var name: String
     var icon: NSImage?
+    var storeBundleID: String?
     var symbol: String
     var action: () -> Void
     @ViewState private var hovering = false
+    @ViewState private var remoteIcon: NSImage?
 
     var body: some View {
         Button(action: action) {
@@ -191,6 +198,12 @@ private struct ServiceButton: View {
                 Group {
                     if let icon {
                         Image(nsImage: icon).resizable()
+                    } else if let remoteIcon {
+                        Image(nsImage: remoteIcon)
+                            .resizable()
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .padding(2)
+                            .transition(.blurFade)
                     } else {
                         Image(systemName: symbol)
                             .font(.system(size: 16, weight: .semibold))
@@ -200,6 +213,12 @@ private struct ServiceButton: View {
                 }
                 .frame(width: 38, height: 38)
                 .scaleEffect(hovering ? 1.1 : 1)
+                .onAppear {
+                    guard icon == nil, let storeBundleID else { return }
+                    RemoteImages.appIcon(bundleID: storeBundleID) { image in
+                        withAnimation(.smooth(duration: 0.4)) { remoteIcon = image }
+                    }
+                }
                 Text(name)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))

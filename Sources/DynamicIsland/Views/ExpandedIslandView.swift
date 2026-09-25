@@ -50,7 +50,7 @@ struct ExpandedIslandView: View {
             }
             .padding(.leading, 16)
             Spacer(minLength: model.notchSize.width + 20)
-            StatusCluster()
+            WeatherChip(service: model.weather)
                 .padding(.trailing, 20)
         }
     }
@@ -122,34 +122,37 @@ private struct TabButton: View {
     }
 }
 
-/// Часы и заряд батареи в правом углу шапки.
-private struct StatusCluster: View {
+/// Погода в правом углу шапки.
+private struct WeatherChip: View {
+    @ObservedObject var service: WeatherService
+
     var body: some View {
-        TimelineView(.everyMinute) { ctx in
-            HStack(spacing: 10) {
-                if let battery = BatteryInfo.read() {
-                    HStack(spacing: 4) {
-                        Text("\(battery.percent)%")
-                            .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                        Image(systemName: battery.symbol)
-                            .font(.system(size: 13))
-                            .foregroundStyle(battery.percent <= 20 && !battery.charging ? .red : .white, .white)
-                            .symbolRenderingMode(.palette)
-                    }
-                    .foregroundStyle(.white.opacity(0.8))
+        if let w = service.weather {
+            HStack(spacing: 5) {
+                Image(systemName: w.symbol)
+                    .symbolRenderingMode(.multicolor)
+                    .font(.system(size: 13))
+                Text("\(w.temperature)°")
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(w.temperature)))
+                if let city = w.city {
+                    Text(city)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
                 }
-                Text(ctx.date, format: .dateTime.hour().minute())
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.85))
             }
+            .foregroundStyle(.white.opacity(0.9))
+            .transition(.blurFade)
         }
     }
 }
 
-struct BatteryInfo {
+struct BatteryInfo: Equatable {
     var percent: Int
     var charging: Bool
+    var onAC = false
 
     var symbol: String {
         if charging { return "battery.100percent.bolt" }
@@ -170,9 +173,9 @@ struct BatteryInfo {
                   desc[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
                   let current = desc[kIOPSCurrentCapacityKey] as? Int,
                   let max = desc[kIOPSMaxCapacityKey] as? Int, max > 0 else { continue }
-            let charging = (desc[kIOPSIsChargingKey] as? Bool ?? false)
-                || desc[kIOPSPowerSourceStateKey] as? String == kIOPSACPowerValue
-            return BatteryInfo(percent: current * 100 / max, charging: charging)
+            let onAC = desc[kIOPSPowerSourceStateKey] as? String == kIOPSACPowerValue
+            let charging = (desc[kIOPSIsChargingKey] as? Bool ?? false) || onAC
+            return BatteryInfo(percent: current * 100 / max, charging: charging, onAC: onAC)
         }
         return nil
     }

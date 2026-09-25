@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
 
-        let clear = NSMenuItem(title: "Очистить полку", action: #selector(clearShelf), keyEquivalent: "")
+        let clear = NSMenuItem(title: "Очистить файлы", action: #selector(clearShelf), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
 

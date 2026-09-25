@@ -10,7 +10,7 @@ struct HomeView: View {
     var body: some View {
         HStack(spacing: 18) {
             clock
-                .frame(width: 200, alignment: .leading)
+                .frame(width: 176, alignment: .leading)
                 .staggered(0)
 
             Rectangle()
@@ -20,6 +20,7 @@ struct HomeView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
+                    WeatherCard(service: model.weather).staggered(1)
                     if let mac = batteries.mac {
                         BatteryCard(name: "MacBook", levels: [
                             .init(label: mac.charging ? "Заряжается" : "", symbol: "laptopcomputer",
@@ -47,7 +48,7 @@ struct HomeView: View {
         TimelineView(.everyMinute) { ctx in
             VStack(alignment: .leading, spacing: 2) {
                 Text(ctx.date, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
-                    .font(.system(size: 46, weight: .bold, design: .rounded))
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: ctx.date.timeIntervalSince1970))
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: ctx.date)
@@ -123,10 +124,11 @@ private struct BatteryCard: View {
 }
 
 /// Кольцо заряда: при появлении заполняется от нуля.
-private struct BatteryRing: View {
+struct BatteryRing: View {
     var percent: Int
     var charging: Bool
     var symbol: String
+    var size: CGFloat = 46
     @ViewState private var progress: Double = 0
 
     private var color: Color {
@@ -144,11 +146,11 @@ private struct BatteryRing: View {
                 .stroke(color.gradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Image(systemName: charging ? "bolt.fill" : symbol)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: size * 0.33, weight: .medium))
                 .foregroundStyle(.white.opacity(0.9))
                 .symbolEffect(.pulse, isActive: charging)
         }
-        .frame(width: 46, height: 46)
+        .frame(width: size, height: size)
         .onAppear {
             withAnimation(.spring(response: 1.0, dampingFraction: 0.85).delay(0.15)) {
                 progress = Double(percent) / 100
@@ -157,6 +159,45 @@ private struct BatteryRing: View {
         .onChange(of: percent) { _, value in
             withAnimation(.spring(response: 0.8)) { progress = Double(value) / 100 }
         }
+    }
+}
+
+private struct WeatherCard: View {
+    @ObservedObject var service: WeatherService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let w = service.weather {
+                HStack(alignment: .top) {
+                    Text("\(w.temperature)°")
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
+                        .contentTransition(.numericText(value: Double(w.temperature)))
+                    Spacer(minLength: 6)
+                    Image(systemName: w.symbol)
+                        .symbolRenderingMode(.multicolor)
+                        .font(.system(size: 22))
+                        .symbolEffect(.pulse, options: .repeating.speed(0.3))
+                }
+                Text(w.summary)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Text("↑\(w.high)°  ↓\(w.low)°" + (w.city.map { "  ·  \($0)" } ?? ""))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+            } else {
+                ProgressView().controlSize(.small)
+                Text("Погода загружается…")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(width: 132, height: 104, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(LinearGradient(colors: [Color(white: 0.16), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)))
     }
 }
 

@@ -8,7 +8,7 @@ struct ShelfView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(store.items.isEmpty ? "Полка" : "Полка · \(store.items.count)")
+                Text(store.items.isEmpty ? "Файлы" : "Файлы · \(store.items.count)")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.6))
                     .contentTransition(.numericText())
@@ -111,7 +111,7 @@ private struct ShelfTile: View {
                 NSPasteboard.general.setString(item.url.path, forType: .string)
             }
             Divider()
-            Button("Убрать с полки", role: .destructive, action: onRemove)
+            Button("Убрать из файлов", role: .destructive, action: onRemove)
         }
         .help(item.url.path)
         .task(id: item.url) { await loadThumbnail() }

@@ -10,7 +10,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "square.grid.2x2.fill"
         case .music: return "music.note"
-        case .shelf: return "tray.full.fill"
+        case .shelf: return "folder.fill"
         case .notes: return "note.text"
         case .controls: return "slider.horizontal.3"
         }
@@ -20,11 +20,17 @@ enum IslandTab: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "Главная"
         case .music: return "Музыка"
-        case .shelf: return "Полка"
+        case .shelf: return "Файлы"
         case .notes: return "Заметки"
         case .controls: return "Управление"
         }
     }
+}
+
+/// Всплывающие события в стиле iPhone: подключили зарядку или наушники.
+enum IslandEvent: Equatable {
+    case charging(BatteryInfo)
+    case device(DeviceBattery)
 }
 
 struct HUDState: Equatable {
@@ -41,6 +47,7 @@ enum IslandMetrics {
     static let hudWing: CGFloat = 72
     static let peekWing: CGFloat = 56
     static let peekExtraHeight: CGFloat = 34
+    static let eventSize = CGSize(width: 440, height: 118)
     /// Запас окна вокруг острова, чтобы тень и пружинная анимация не обрезались.
     static let windowSize = CGSize(width: 760, height: 320)
     static let spring = Animation.spring(response: 0.42, dampingFraction: 0.78)
@@ -57,6 +64,7 @@ final class IslandModel: ObservableObject {
     @Published var isDropTargeted = false
     /// Короткое уведомление «скопировано из …» по бокам выреза.
     @Published var clipPeek: ClipGroup?
+    @Published var event: IslandEvent?
     @Published var notchSize = CGSize(width: 200, height: 32)
     @Published var hasPhysicalNotch = true
 
@@ -68,10 +76,12 @@ final class IslandModel: ObservableObject {
     let clipboard = ClipboardMonitor()
     let batteries = DeviceBatteryMonitor()
     let keys = MediaKeyInterceptor()
+    let weather = WeatherService()
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
     private var clipTask: DispatchWorkItem?
+    private var eventTask: DispatchWorkItem?
     private var bag = Set<AnyCancellable>()
 
     init() {
@@ -79,6 +89,8 @@ final class IslandModel: ObservableObject {
 
         keys.handler = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
         clipboard.onCopy = { [weak self] group in self?.showClipPeek(group) }
+        batteries.onChargerConnected = { [weak self] info in self?.showEvent(.charging(info)) }
+        batteries.onAudioDeviceConnected = { [weak self] device in self?.showEvent(.device(device)) }
 
         volume.onExternalChange = { [weak self] value, muted in
             self?.showHUD(HUDState(kind: .volume, value: value, muted: muted))
@@ -101,6 +113,7 @@ final class IslandModel: ObservableObject {
 
     var bottomRadius: CGFloat {
         if isExpanded { return 34 }
+        if event != nil { return 32 }
         if peek && media.hasTrack { return 20 }
         return hasPhysicalNotch ? 11 : 14
     }
@@ -110,6 +123,9 @@ final class IslandModel: ObservableObject {
         let n = notchSize
         if isExpanded {
             return CGSize(width: IslandMetrics.expandedWidth, height: n.height + IslandMetrics.expandedContentHeight)
+        }
+        if event != nil {
+            return CGSize(width: IslandMetrics.eventSize.width, height: n.height + IslandMetrics.eventSize.height)
         }
         if hud != nil || clipPeek != nil {
             return CGSize(width: n.width + IslandMetrics.hudWing * 2, height: n.height)
@@ -136,7 +152,11 @@ final class IslandModel: ObservableObject {
         hud = nil
         peek = false
         clipPeek = nil
-        if tab == .home { batteries.refresh() }
+        event = nil
+        if tab == .home {
+            batteries.refresh()
+            weather.refresh()
+        }
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         withAnimation(IslandMetrics.spring) { isExpanded = true }
     }
@@ -146,8 +166,31 @@ final class IslandModel: ObservableObject {
         withAnimation(IslandMetrics.softSpring) { isExpanded = false }
     }
 
-    func showHUD(_ state: HUDState) {
+    func showEvent(_ event: IslandEvent) {
         guard !isExpanded else { return }
+        eventTask?.cancel()
+        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        // Пружина с небольшим перелётом — остров «выпрыгивает».
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.66)) {
+            hud = nil
+            peek = false
+            clipPeek = nil
+            self.event = event
+        }
+        let task = DispatchWorkItem { [weak self] in
+            withAnimation(IslandMetrics.softSpring) { self?.event = nil }
+        }
+        eventTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5, execute: task)
+    }
+
+    func dismissEvent() {
+        eventTask?.cancel()
+        withAnimation(IslandMetrics.softSpring) { event = nil }
+    }
+
+    func showHUD(_ state: HUDState) {
+        guard !isExpanded, event == nil else { return }
         hudTask?.cancel()
         withAnimation(IslandMetrics.spring) {
             peek = false
@@ -179,7 +222,7 @@ final class IslandModel: ObservableObject {
     }
 
     func showClipPeek(_ group: ClipGroup) {
-        guard !isExpanded, hud == nil else { return }
+        guard !isExpanded, hud == nil, event == nil else { return }
         clipTask?.cancel()
         withAnimation(IslandMetrics.spring) {
             peek = false
@@ -193,7 +236,7 @@ final class IslandModel: ObservableObject {
     }
 
     func showPeek() {
-        guard !isExpanded, hud == nil, media.hasTrack else { return }
+        guard !isExpanded, hud == nil, event == nil, media.hasTrack else { return }
         peekTask?.cancel()
         withAnimation(IslandMetrics.spring) { peek = true }
         let task = DispatchWorkItem { [weak self] in

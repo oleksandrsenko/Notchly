@@ -59,6 +59,7 @@ struct IslandRootView: View {
         .animation(IslandMetrics.spring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
         .animation(IslandMetrics.spring, value: model.clipPeek)
+        .animation(.spring(response: 0.55, dampingFraction: 0.66), value: model.event)
         .preferredColorScheme(.dark)
         .onChange(of: model.isDropTargeted) { _, targeted in
             if targeted { model.expand(to: .shelf) }
@@ -72,6 +73,13 @@ struct IslandRootView: View {
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .top)).animation(IslandMetrics.spring.delay(0.05)),
                     removal: .opacity.animation(.easeOut(duration: 0.12))))
+        } else if let event = model.event {
+            EventView(event: event, notchHeight: model.notchSize.height)
+                .contentShape(Rectangle())
+                .onTapGesture { model.dismissEvent() }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.85, anchor: .top)).animation(IslandMetrics.spring.delay(0.06)),
+                    removal: .opacity.animation(.easeOut(duration: 0.15))))
         } else if let hud = model.hud {
             HUDView(state: hud, notchWidth: model.notchSize.width)
                 .transition(.opacity.combined(with: .blurReplace))
