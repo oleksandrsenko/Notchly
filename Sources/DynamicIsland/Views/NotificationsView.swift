@@ -79,7 +79,7 @@ struct NotificationsView: View {
                         isExpanded: expanded == "gmail") { toggle("gmail") }
             if expanded == "gmail" {
                 Group {
-                    if gmail.isConnected {
+                    if gmail.isConnected && !gmail.needsPassword {
                         VStack(spacing: 2) {
                             ForEach(gmail.mails) { mail in
                                 MailRow(mail: mail) { gmail.open(mail) }
@@ -368,6 +368,7 @@ private struct GmailConnectForm: View {
             HStack(spacing: 6) {
                 TextField("you@gmail.com", text: $email)
                     .frame(width: 170)
+                    .onAppear { if email.isEmpty, let account = gmail.account { email = account } }
                 SecureField("Пароль приложения", text: $password)
                 Button {
                     gmail.connect(email: email, appPassword: password)

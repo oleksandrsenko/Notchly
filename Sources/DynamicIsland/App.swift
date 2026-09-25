@@ -25,6 +25,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             print(report)
             exit(0)
         }
+        if CommandLine.arguments.contains("--services-selftest") {
+            var lines: [String] = []
+            let group = DispatchGroup()
+            group.enter()
+            GeminiAssistant.selfTest { lines.append("Gemini: " + $0); group.leave() }
+            group.enter()
+            GmailClient.selfTest { lines.append("Gmail: " + $0); group.leave() }
+            while group.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.1)) }
+            let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("DynamicIsland/services-selftest.txt")
+            try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            exit(0)
+        }
         if CommandLine.arguments.contains("--batteries-selftest") {
             let monitor = DeviceBatteryMonitor()
             RunLoop.main.run(until: Date().addingTimeInterval(4))

@@ -331,16 +331,23 @@ final class MediaController: ObservableObject {
         if changed && !title.isEmpty {
             handleRepeatOnTrackChange()
             onTrackChange?()
-            // Если плеер не пришлёт обложку за секунду — ищем её в iTunes.
+            // Через секунду смотрим на обложку: если её нет или она мелкая (браузеры присылают 300 px и меньше),
+            // берём версию 1200 px из iTunes.
             let id = newID
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                guard let self, self.trackID == id, self.artwork == nil else { return }
+                guard let self, self.trackID == id, Self.pixelWidth(self.artwork) < 600 else { return }
                 RemoteImages.artwork(title: self.title, artist: self.artist) { [weak self] image in
-                    guard let self, let image, self.trackID == id, self.artwork == nil else { return }
+                    guard let self, let image, self.trackID == id,
+                          Self.pixelWidth(image) > Self.pixelWidth(self.artwork) else { return }
                     self.setArtwork(image)
                 }
             }
         }
+    }
+
+    private static func pixelWidth(_ image: NSImage?) -> Int {
+        guard let image else { return 0 }
+        return image.representations.map(\.pixelsWide).max() ?? Int(image.size.width)
     }
 
     private func setArtwork(_ image: NSImage?) {

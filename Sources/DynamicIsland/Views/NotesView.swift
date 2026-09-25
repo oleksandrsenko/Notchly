@@ -146,9 +146,7 @@ struct NotesView: View {
                             .foregroundStyle(.white.opacity(0.3))
                             .padding(.horizontal, 13)
                             .padding(.vertical, 8)
-                            .fixedSize()
                             .allowsHitTesting(false)
-                            .transaction { $0.animation = nil }
                     }
                 }
             }

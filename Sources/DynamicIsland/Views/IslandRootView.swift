@@ -63,7 +63,8 @@ struct IslandRootView: View {
         .animation(IslandMetrics.softSpring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
         .animation(IslandMetrics.spring, value: model.clipPeek)
-        .animation(.spring(response: 0.5, dampingFraction: 0.86), value: model.event)
+        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: model.event)
+        .animation(.spring(response: 0.55, dampingFraction: 0.84), value: model.eventExpanded)
         .preferredColorScheme(.dark)
         .onChange(of: model.isDropTargeted) { _, targeted in
             if targeted { model.expand(to: .shelf) }
@@ -79,7 +80,7 @@ struct IslandRootView: View {
                 .transition(.asymmetric(
                     insertion: .opacity.animation(.easeOut(duration: 0.28).delay(0.1)),
                     removal: .opacity.animation(.easeIn(duration: 0.16))))
-        } else if let event = model.event {
+        } else if let event = model.event, model.eventExpanded {
             EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -87,8 +88,10 @@ struct IslandRootView: View {
                     if !event.isDevice { model.dismissEvent() }
                 }
                 .transition(.asymmetric(
-                    insertion: .opacity.animation(.smooth(duration: 0.3).delay(0.1)),
-                    removal: .opacity.animation(.easeOut(duration: 0.15))))
+                    insertion: .opacity.animation(.easeOut(duration: 0.3).delay(0.12)),
+                    removal: .opacity.animation(.easeIn(duration: 0.14))))
+        } else if model.event != nil {
+            Color.clear
         } else if let hud = model.hud {
             HUDView(state: hud, notchWidth: model.notchSize.width)
                 .transition(.opacity)

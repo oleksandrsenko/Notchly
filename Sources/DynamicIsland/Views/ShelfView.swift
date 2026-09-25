@@ -23,12 +23,15 @@ struct ShelfView: View {
             }
 
             ZStack {
+                // Пунктирная рамка нужна, только когда полка пустая или над ней тянут файл.
+                // С файлами фон остаётся чистым — без «плёнки» поверх иконок.
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
                     .foregroundStyle(.white.opacity(isTargeted ? 0.6 : 0.16))
                     .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(.white.opacity(isTargeted ? 0.08 : 0.03)))
-                    .animation(.easeOut(duration: 0.2), value: isTargeted)
+                        .fill(.white.opacity(isTargeted ? 0.06 : 0.02)))
+                    .opacity(store.items.isEmpty || isTargeted ? 1 : 0)
+                    .animation(.easeOut(duration: 0.25), value: isTargeted)
 
                 if store.items.isEmpty {
                     VStack(spacing: 6) {
@@ -42,13 +45,14 @@ struct ShelfView: View {
                     .foregroundStyle(.white.opacity(0.5))
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             ForEach(store.items) { item in
                                 ShelfTile(item: item) { store.remove(item) }
-                                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+                                    .transition(.opacity.combined(with: .offset(y: 6)))
                             }
                         }
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, 2)
+                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -67,39 +71,47 @@ private struct ShelfTile: View {
         VStack(spacing: 5) {
             Group {
                 if let thumbnail {
-                    Image(nsImage: thumbnail).resizable().aspectRatio(contentMode: .fit)
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 } else {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path)).resizable()
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
+                        .resizable()
+                        .interpolation(.high)
                 }
             }
-            .frame(width: 48, height: 48)
-            .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+            .frame(width: 52, height: 52)
 
             Text(item.name)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(.white.opacity(0.9))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .truncationMode(.middle)
                 .frame(width: 76, height: 26, alignment: .top)
         }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(hovering ? 0.1 : 0)))
+        .padding(.horizontal, 6)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(hovering ? 0.08 : 0)))
+        // Крестик внутри плитки, чтобы прокрутка его не обрезала. Без масштабирования и теней — всё чёткое.
         .overlay(alignment: .topTrailing) {
-            if hovering {
-                Button(action: onRemove) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.black, .white.opacity(0.85))
-                }
-                .buttonStyle(.plain)
-                .offset(x: 2, y: -2)
-                .transition(.scale.combined(with: .opacity))
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(Color(white: 0.28)))
+                    .contentShape(Circle())
             }
+            .buttonStyle(PressableStyle())
+            .padding(4)
+            .opacity(hovering ? 1 : 0)
+            .help("Убрать из файлов")
         }
-        .scaleEffect(hovering ? 1.04 : 1)
-        .onHover { h in withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) { hovering = h } }
+        .onHover { h in withAnimation(.easeOut(duration: 0.18)) { hovering = h } }
         .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
         .onTapGesture(count: 2) { NSWorkspace.shared.open(item.url) }
         .contextMenu {

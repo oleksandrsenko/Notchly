@@ -25,6 +25,7 @@ struct ArtworkView: View {
             if let image {
                 Image(nsImage: image)
                     .resizable()
+                    .interpolation(.high)
                     .aspectRatio(contentMode: .fill)
                     .id(ObjectIdentifier(image))
                     .transition(.blurFade)
@@ -58,9 +59,9 @@ struct StaggeredAppear: ViewModifier {
     func body(content: Content) -> some View {
         content
             .opacity(visible ? 1 : 0)
-            .offset(y: visible ? 0 : 8)
+            .offset(y: visible ? 0 : 4)
             .onAppear {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.82).delay(0.04 + Double(index) * 0.045)) {
+                withAnimation(.easeOut(duration: 0.38).delay(0.05 + Double(index) * 0.05)) {
                     visible = true
                 }
             }
@@ -126,7 +127,7 @@ struct IconButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
-        .onHover { h in withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { hovering = h } }
+        .onHover { h in withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { hovering = h } }
     }
 }
 
@@ -134,7 +135,7 @@ struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.86 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .animation(.spring(response: 0.25, dampingFraction: 0.78), value: configuration.isPressed)
     }
 }
 

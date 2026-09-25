@@ -60,7 +60,7 @@ enum IslandEvent: Equatable {
         switch self {
         case .charging: return 4.5
         case .device: return 8
-        case .notification: return 6
+        case .notification: return 4
         }
     }
 }
@@ -107,6 +107,9 @@ final class IslandModel: ObservableObject {
     /// Короткое уведомление «скопировано из …» по бокам выреза.
     @Published var clipPeek: ClipGroup?
     @Published var event: IslandEvent?
+    /// Карточка события раскрыта. Сначала из выреза опускается «капля», потом она растекается в карточку.
+    @Published var eventExpanded = false
+    private var eventQueue: [IslandEvent] = []
     /// Пока курсор над карточкой события, она не закрывается сама.
     var eventHovered = false
     @Published var notchSize = CGSize(width: 200, height: 32)
@@ -172,7 +175,7 @@ final class IslandModel: ObservableObject {
 
     var bottomRadius: CGFloat {
         if isExpanded { return 34 }
-        if let event { return event.bottomRadius }
+        if let event { return eventExpanded ? event.bottomRadius : 22 }
         if peek && media.hasTrack { return 20 }
         return hasPhysicalNotch ? 11 : 14
     }
@@ -184,6 +187,9 @@ final class IslandModel: ObservableObject {
             return CGSize(width: IslandMetrics.expandedWidth, height: n.height + IslandMetrics.expandedContentHeight)
         }
         if let event {
+            if !eventExpanded {
+                return CGSize(width: n.width + 18, height: n.height + 24)
+            }
             let size = event.size
             return CGSize(width: size.width, height: n.height + size.height)
         }
@@ -223,6 +229,8 @@ final class IslandModel: ObservableObject {
         peek = false
         clipPeek = nil
         event = nil
+        eventExpanded = false
+        eventQueue.removeAll()
         if self.tab == .home {
             batteries.refresh()
             weather.refresh()
@@ -239,23 +247,34 @@ final class IslandModel: ObservableObject {
 
     func showEvent(_ event: IslandEvent) {
         guard !isExpanded else { return }
+        // Пока показана одна карточка, следующие уведомления ждут своей очереди.
+        if self.event != nil, case .notification = event {
+            eventQueue.append(event)
+            return
+        }
         eventTask?.cancel()
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-        // Плавное раскрытие без перелёта, как карточки на iPhone.
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) {
+        // «Капля»: сначала узкая капля выпадает из выреза…
+        eventExpanded = false
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
             hud = nil
             peek = false
             clipPeek = nil
             self.event = event
         }
-        scheduleEventDismiss(after: event.duration)
+        // …и почти сразу мягко растекается в карточку.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, self.event == event else { return }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.84)) { self.eventExpanded = true }
+        }
+        scheduleEventDismiss(after: event.duration + 0.2)
     }
 
     private func scheduleEventDismiss(after delay: TimeInterval) {
         let task = DispatchWorkItem { [weak self] in
             guard let self else { return }
             if self.eventHovered { return self.scheduleEventDismiss(after: 1) }
-            withAnimation(IslandMetrics.softSpring) { self.event = nil }
+            self.hideEvent()
         }
         eventTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
@@ -264,7 +283,18 @@ final class IslandModel: ObservableObject {
     func dismissEvent() {
         eventTask?.cancel()
         eventHovered = false
-        withAnimation(IslandMetrics.softSpring) { event = nil }
+        hideEvent()
+    }
+
+    /// Сворачиваем карточку обратно в вырез и показываем следующую из очереди.
+    private func hideEvent() {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.95)) {
+            eventExpanded = false
+            event = nil
+        }
+        guard !eventQueue.isEmpty else { return }
+        let next = eventQueue.removeFirst()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.showEvent(next) }
     }
 
     func showHUD(_ state: HUDState) {

@@ -12,9 +12,14 @@ final class GeminiAssistant: ObservableObject {
 
     private static let service = "gemini"
     private static let account = "api-key"
-    /// Если модель перегружена (503), упёрлась в лимит (429) или недоступна (404) — пробуем следующую.
-    private static let models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite",
-                                 "gemini-flash-lite-latest", "gemini-2.0-flash"]
+    /// Если модель перегружена (503), упёрлась в лимит (429) или снята (404) — пробуем следующую.
+    /// Последняя сработавшая модель запоминается и пробуется первой.
+    private static let baseModels = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash-lite",
+                                     "gemini-flash-lite-latest"]
+    private static var models: [String] {
+        let last = UserDefaults.standard.string(forKey: "gemini.lastModel")
+        return (last.map { [$0] } ?? []) + baseModels.filter { $0 != last }
+    }
 
     init() {
         hasKey = Keychain.data(service: Self.service, account: Self.account) != nil
@@ -58,6 +63,23 @@ final class GeminiAssistant: ObservableObject {
                 case .failure(let message):
                     self.error = message
                 }
+            }
+        }
+    }
+
+    /// Проверка без интерфейса: настоящий запрос приложения (со схемой ответа) по цепочке моделей.
+    static func selfTest(_ done: @escaping (String) -> Void) {
+        guard let keyData = Keychain.data(service: service, account: account),
+              let key = String(data: keyData, encoding: .utf8) else { return done("ключ не найден в Связке ключей") }
+        let assistant = GeminiAssistant()
+        assistant.send(body: requestBody(for: "сегодня в 5 спортзал, в 10 созвон", tasks: []), key: key, models: models) { result in
+            withExtendedLifetime(assistant) {}
+            switch result {
+            case .success(let answer):
+                let model = UserDefaults.standard.string(forKey: "gemini.lastModel") ?? "?"
+                done("OK (\(model)): задач \(answer.tasks.count) — " + answer.tasks.map { "\($0.time ?? "--") \($0.text)" }.joined(separator: ", "))
+            case .failure(let message):
+                done("ошибка: \(message)")
             }
         }
     }
@@ -132,6 +154,7 @@ final class GeminiAssistant: ObservableObject {
                 return
             }
             if let error { return done(.failure(error.localizedDescription)) }
+            if status == 200 { UserDefaults.standard.set(model, forKey: "gemini.lastModel") }
             guard let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 return done(.failure("Пустой ответ от Gemini"))
             }
@@ -144,6 +167,8 @@ final class GeminiAssistant: ObservableObject {
                     return done(.failure("Лимит бесплатных запросов исчерпан — попробуйте позже"))
                 case 500, 503:
                     return done(.failure("Серверы Gemini сейчас перегружены — попробуйте через минуту"))
+                case 404:
+                    return done(.failure("Google сменил модели Gemini — обновите приложение"))
                 default:
                     return done(.failure(message ?? "Ошибка Gemini (\(status))"))
                 }

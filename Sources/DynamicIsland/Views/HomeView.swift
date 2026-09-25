@@ -10,7 +10,7 @@ struct HomeView: View {
     var body: some View {
         HStack(spacing: 18) {
             clock
-                .frame(width: 200, alignment: .leading)
+                .frame(width: 200)
                 .staggered(0)
 
             Rectangle()
@@ -31,12 +31,12 @@ struct HomeView: View {
 
     private var clock: some View {
         TimelineView(.everyMinute) { ctx in
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .center, spacing: 2) {
+                // Без анимированной смены цифр: так время всегда остаётся идеально чётким.
                 Text(ctx.date, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
-                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .font(.system(size: 44, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                    .contentTransition(.numericText(value: ctx.date.timeIntervalSince1970))
-                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: ctx.date)
+                    .foregroundStyle(.white)
                 Text(ctx.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "ru_RU"))).capitalizedFirst)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))

@@ -17,6 +17,8 @@ final class NotchPanel: NSPanel {
         isMovable = false
         hidesOnDeactivate = false
         ignoresMouseEvents = true
+        // Иначе движения мыши над самой панелью не доходят до локального монитора.
+        acceptsMouseMovedEvents = true
     }
 
     override var canBecomeKey: Bool { true }
@@ -32,6 +34,8 @@ final class NotchWindowController {
     private var collapseWork: DispatchWorkItem?
     private var dragChangeCount = NSPasteboard(name: .drag).changeCount
     private let menuBarGuard = MenuBarGuard()
+    private var hoverTimer: Timer?
+    private var lastPolledLocation = NSPoint.zero
 
     init() {
         let root = IslandRootView(model: model, media: model.media)
@@ -45,6 +49,7 @@ final class NotchWindowController {
         // Без этого после программного перемещения курсора он «замирает» на четверть секунды.
         CGEventSource(stateID: .combinedSessionState)?.localEventsSuppressionInterval = 0
         model.keys.start()
+        startHoverPolling()
         menuBarGuard.zone = { [weak self] in
             guard let self else { return nil }
             let rect = self.islandRect().insetBy(dx: -14, dy: 0)
@@ -112,6 +117,23 @@ final class NotchWindowController {
         monitors.append(NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             self?.handleMouse(dragging: false)
         } as Any)
+    }
+
+    /// Страховка к мониторам событий: иногда первое движение над панелью не приходит ни в один из них
+    /// (например, когда она только что перестала пропускать мышь), и остров раскрывался только со второго раза.
+    /// Проверяем курсор 20 раз в секунду, но только у верхней кромки экрана — это почти ничего не стоит.
+    private func startHoverPolling() {
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let location = NSEvent.mouseLocation
+            guard location != self.lastPolledLocation else { return }
+            self.lastPolledLocation = location
+            let nearTop = location.y >= self.screen.frame.maxY - self.model.shapeSize.height - 40
+            if nearTop || self.model.isExpanded { self.handleMouse(dragging: NSEvent.pressedMouseButtons != 0) }
+        }
+        timer.tolerance = 0.01
+        RunLoop.main.add(timer, forMode: .common)
+        hoverTimer = timer
     }
 
     private func handleMouse(dragging: Bool) {
@@ -204,7 +226,8 @@ final class NotchWindowController {
             }
         }
         collapseWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        // Остров не закрывается сразу, если курсор случайно соскользнул: ждём 2,5 с.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
     }
 
     private func syncMouseEvents(inHotZone: Bool) {

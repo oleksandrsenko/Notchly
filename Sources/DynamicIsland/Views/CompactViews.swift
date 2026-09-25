@@ -110,7 +110,7 @@ struct ClipPeekView: View {
         }
         .frame(maxHeight: .infinity)
         .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.55).delay(0.05)) { appeared = true }
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.78).delay(0.05)) { appeared = true }
         }
     }
 }

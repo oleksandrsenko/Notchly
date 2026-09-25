@@ -40,9 +40,39 @@ final class SystemNotificationsReader: ObservableObject {
         "dev.aleksandrsenko.dynamicisland", "com.apple.controlcenter", "_system_center_",
     ]
 
+    private var watchers: [DispatchSourceFileSystemObject] = []
+    private var watchWork: DispatchWorkItem?
+
     init() {
         reload()
+        startWatching()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reloadIfChanged() }
+    }
+
+    /// Следим за базой и её WAL-файлом: новое уведомление видно сразу, а не при следующем опросе.
+    private func startWatching() {
+        watchers.forEach { $0.cancel() }
+        watchers = []
+        for file in [path, path + "-wal", (path as NSString).deletingLastPathComponent] {
+            let fd = open(file, O_EVTONLY)
+            guard fd >= 0 else { continue }
+            let source = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: fd, eventMask: [.write, .extend, .delete, .rename], queue: .main)
+            source.setEventHandler { [weak self] in
+                guard let self else { return }
+                // WAL-файл пересоздаётся при checkpoint — тогда подписываемся заново.
+                if !source.data.isDisjoint(with: [.delete, .rename]) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self.startWatching() }
+                }
+                self.watchWork?.cancel()
+                let work = DispatchWorkItem { [weak self] in self?.reload() }
+                self.watchWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
+            }
+            source.setCancelHandler { close(fd) }
+            source.resume()
+            watchers.append(source)
+        }
     }
 
     func openFullDiskAccessSettings() {
@@ -95,10 +125,10 @@ final class SystemNotificationsReader: ObservableObject {
         let newest = items.map(\.date).max()
         defer { if let newest { newestSeen = max(newestSeen ?? newest, newest) } }
         // При первом чтении базы ничего не показываем — это старые уведомления.
-        guard let seen = newestSeen,
-              let fresh = items.filter({ $0.date > seen && Date().timeIntervalSince($0.date) < 60 })
-                .max(by: { $0.date < $1.date }) else { return }
-        onNew?(fresh)
+        guard let seen = newestSeen else { return }
+        items.filter { $0.date > seen && Date().timeIntervalSince($0.date) < 60 }
+            .sorted { $0.date < $1.date }
+            .forEach { onNew?($0) }
     }
 
     private func reloadIfChanged() {
@@ -119,12 +149,14 @@ final class SystemNotificationsReader: ObservableObject {
             DispatchQueue.main.async {
                 switch result {
                 case .noAccess:
+                    if self.watchers.isEmpty == false { self.watchers.forEach { $0.cancel() }; self.watchers = [] }
                     self.needsFullDiskAccess = true
                     self.readError = nil
                 case .failed(let message):
                     self.needsFullDiskAccess = false
                     self.readError = message
                 case .items(let items):
+                    if self.watchers.isEmpty { self.startWatching() }
                     self.needsFullDiskAccess = false
                     self.readError = nil
                     self.raw = items
@@ -178,9 +210,10 @@ final class SystemNotificationsReader: ObservableObject {
         defer { sqlite3_close(db) }
 
         let sql = """
-        SELECT record.rec_id, app.identifier, record.data, record.delivered_date
+        SELECT record.rec_id, app.identifier, record.data,
+               COALESCE(NULLIF(record.delivered_date, 0), record.request_date)
         FROM record JOIN app ON app.app_id = record.app_id
-        ORDER BY record.delivered_date DESC LIMIT 300
+        ORDER BY COALESCE(NULLIF(record.delivered_date, 0), record.request_date) DESC LIMIT 300
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {

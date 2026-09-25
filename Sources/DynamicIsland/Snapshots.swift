@@ -43,7 +43,7 @@ enum Snapshots {
         model.clipPeek = model.clipboard.groups.first; shot("2-clip"); model.clipPeek = nil
         model.peek = true; shot("2-peek"); model.peek = false
         model.hud = HUDState(kind: .volume, value: 0.6); shot("3-hud"); model.hud = nil
-        model.event = .charging(BatteryInfo(percent: 82, charging: true, onAC: true)); shot("7-charging")
+        model.eventExpanded = true; model.event = .charging(BatteryInfo(percent: 82, charging: true, onAC: true)); shot("7-charging")
         model.event = .device(DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
             .init(label: "Левый", symbol: "airpod.left", percent: 100),
             .init(label: "Правый", symbol: "airpod.right", percent: 95),

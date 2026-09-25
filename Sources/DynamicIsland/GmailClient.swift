@@ -17,6 +17,8 @@ final class GmailClient: ObservableObject {
     @Published private(set) var mails: [MailItem] = []
     @Published private(set) var error: String?
     @Published private(set) var isLoading = false
+    /// Пароль в Связке ключей недоступен этой сборке — нужно ввести заново.
+    @Published private(set) var needsPassword = false
 
     private var timer: Timer?
     private static let accountKey = "gmail.account"
@@ -42,11 +44,14 @@ final class GmailClient: ObservableObject {
             do {
                 let mails = try await Self.fetchUnread(email: email, password: password)
                 await MainActor.run {
+                    // Старую запись (от прежней подписи) удаляем, чтобы новая принадлежала этой сборке.
+                    Keychain.delete(service: "gmail", account: email)
                     Keychain.set(Data(password.utf8), service: "gmail", account: email)
                     UserDefaults.standard.set(email, forKey: Self.accountKey)
                     self.account = email
                     self.mails = mails
                     self.knownIDs = Set(mails.map(\.id))
+                    self.needsPassword = false
                     self.isLoading = false
                 }
             } catch {
@@ -70,7 +75,8 @@ final class GmailClient: ObservableObject {
         guard let data = Keychain.data(service: "gmail", account: account),
               let password = String(data: data, encoding: .utf8) else {
             // Обычно после пересборки без постоянной подписи: Связка ключей не отдаёт пароль новой сборке.
-            error = "Нет доступа к паролю в Связке ключей — отключите и подключите Gmail заново"
+            needsPassword = true
+            error = "Введите пароль приложения ещё раз — старая сборка сохранила его недоступным"
             return
         }
         isLoading = true
@@ -87,6 +93,22 @@ final class GmailClient: ObservableObject {
                 self.error = nil
                 self.announceNew(result)
                 if result != self.mails { self.mails = result }
+            }
+        }
+    }
+
+    /// Проверка без интерфейса: вход и число непрочитанных (без содержимого писем).
+    static func selfTest(_ done: @escaping (String) -> Void) {
+        guard let account = UserDefaults.standard.string(forKey: accountKey) else { return done("аккаунт не подключён") }
+        guard let data = Keychain.data(service: "gmail", account: account),
+              let password = String(data: data, encoding: .utf8) else { return done("пароль недоступен в Связке ключей") }
+        Task {
+            do {
+                let mails = try await withTimeout(seconds: 25) { try await fetchUnread(email: account, password: password) }
+                let newest = mails.first.map { shortTimestamp($0.date) } ?? "—"
+                done("вход OK, непрочитанных во «Входящих»: \(mails.count), самое новое: \(newest)")
+            } catch {
+                done("ошибка: \((error as? IMAPError)?.message ?? error.localizedDescription)")
             }
         }
     }

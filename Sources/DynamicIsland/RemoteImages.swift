@@ -13,22 +13,45 @@ enum RemoteImages {
         }
     }
 
-    /// Обложка трека, если плеер её не прислал.
+    /// Обложка трека в высоком разрешении (1200 px) из iTunes. Берём только результат,
+    /// у которого совпадают исполнитель и название, — иначе лучше оставить обложку плеера.
     static func artwork(title: String, artist: String, completion: @escaping (NSImage?) -> Void) {
-        let term = "\(artist) \(title)".trimmingCharacters(in: .whitespaces)
+        let term = "\(artist) \(simplified(title))".trimmingCharacters(in: .whitespaces)
         guard !term.isEmpty else { return completion(nil) }
         load(key: "art:\(term.lowercased())", completion: completion) { done in
             var comps = URLComponents(string: "https://itunes.apple.com/search")!
             comps.queryItems = [.init(name: "term", value: term), .init(name: "entity", value: "song"),
-                                .init(name: "limit", value: "1")]
+                                .init(name: "limit", value: "8")]
             fetchJSON(comps.url!) { json in
-                let results = json?["results"] as? [[String: Any]]
-                guard let small = results?.first?["artworkUrl100"] as? String,
-                      let url = URL(string: small.replacingOccurrences(of: "100x100bb", with: "600x600bb"))
+                let results = json?["results"] as? [[String: Any]] ?? []
+                let wantTitle = normalized(simplified(title)), wantArtist = normalized(artist)
+                let match = results.first { item in
+                    let t = normalized(simplified(item["trackName"] as? String ?? ""))
+                    let a = normalized(item["artistName"] as? String ?? "")
+                    let titleOK = !wantTitle.isEmpty && (t.contains(wantTitle) || wantTitle.contains(t))
+                    let artistOK = wantArtist.isEmpty || a.contains(wantArtist) || wantArtist.contains(a)
+                    return titleOK && artistOK
+                }
+                guard let small = match?["artworkUrl100"] as? String,
+                      let url = URL(string: small.replacingOccurrences(of: "100x100bb", with: "1200x1200bb"))
                 else { return done(nil) }
                 fetchImage(url, done: done)
             }
         }
+    }
+
+    /// «Song (feat. X) - Remastered 2011» → «Song».
+    private static func simplified(_ title: String) -> String {
+        var t = title
+        for sep in [" (", " [", " - ", " – "] {
+            if let r = t.range(of: sep) { t = String(t[..<r.lowerBound]) }
+        }
+        return t
+    }
+
+    private static func normalized(_ s: String) -> String {
+        s.lowercased().folding(options: .diacriticInsensitive, locale: nil)
+            .filter { $0.isLetter || $0.isNumber }
     }
 
     // MARK: - Внутреннее
