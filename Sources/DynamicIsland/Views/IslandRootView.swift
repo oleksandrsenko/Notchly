@@ -40,7 +40,10 @@ struct IslandRootView: View {
         let shape = NotchShape(topRadius: model.topRadius, bottomRadius: model.bottomRadius)
         VStack(spacing: 0) {
             content
-                .frame(width: model.bodySize.width, height: model.bodySize.height, alignment: .top)
+                // Ширина и высота анимируются раздельно: при раскрытии остров сначала расширяется вдоль кромки,
+                // затем опускается — движение идёт сверху вниз, а не из стороны в сторону.
+                .animation(model.widthAnimation) { $0.frame(width: model.bodySize.width) }
+                .animation(model.heightAnimation) { $0.frame(height: model.bodySize.height, alignment: .top) }
                 .padding(.horizontal, model.topRadius)
                 .clipShape(shape)
                 // Тень рисуем только у фона. Если повесить её на весь остров,
@@ -58,7 +61,7 @@ struct IslandRootView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(model.isExpanded ? IslandMetrics.spring : IslandMetrics.collapse, value: model.isExpanded)
+        .animation(model.isExpanded ? IslandMetrics.expandHeight : IslandMetrics.collapse, value: model.isExpanded)
         .animation(IslandMetrics.softSpring, value: media.showsLiveActivity)
         .animation(IslandMetrics.softSpring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
@@ -75,13 +78,17 @@ struct IslandRootView: View {
     private var content: some View {
         if model.isExpanded {
             ExpandedIslandView(model: model, media: media)
-                // Содержимое проявляется, когда форма уже почти раскрылась, и гаснет раньше, чем она сожмётся —
-                // без масштабирования, чтобы ничего не «выпрыгивало».
+                // Содержимое всегда полного размера: при сворачивании форма его обрезает, а не сжимает,
+                // поэтому карточки (MacBook, погода) не ломаются по ходу анимации.
+                .frame(width: IslandMetrics.expandedWidth,
+                       height: model.notchSize.height + IslandMetrics.expandedContentHeight)
                 .transition(.asymmetric(
-                    insertion: .opacity.animation(.easeOut(duration: 0.28).delay(0.1)),
-                    removal: .opacity.animation(.easeIn(duration: 0.16))))
+                    insertion: .opacity.combined(with: .offset(y: -10))
+                        .animation(.easeOut(duration: 0.3).delay(0.06)),
+                    removal: .opacity.animation(.easeOut(duration: 0.26))))
         } else if let event = model.event, model.eventExpanded {
             EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
+                .frame(width: event.size.width, height: model.notchSize.height + event.size.height)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if case .notification(let item) = event { openApp(item.bundleID) }

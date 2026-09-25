@@ -335,7 +335,7 @@ final class MediaController: ObservableObject {
             // берём версию 1200 px из iTunes.
             let id = newID
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                guard let self, self.trackID == id, Self.pixelWidth(self.artwork) < 600 else { return }
+                guard let self, self.trackID == id, Self.pixelWidth(self.artwork) < 512 else { return }
                 RemoteImages.artwork(title: self.title, artist: self.artist) { [weak self] image in
                     guard let self, let image, self.trackID == id,
                           Self.pixelWidth(image) > Self.pixelWidth(self.artwork) else { return }
@@ -353,8 +353,9 @@ final class MediaController: ObservableObject {
     private func setArtwork(_ image: NSImage?) {
         let color = image.flatMap(ArtworkColor.accent(of:)) ?? .white
         let halo = image.flatMap(ArtworkColor.glow(of:))
+        let crisp = image.map { ArtworkColor.displayCopy(of: $0) }
         withAnimation(.smooth(duration: 0.8)) {
-            artwork = image
+            artwork = crisp
             accent = color
             glow = halo
         }
@@ -408,6 +409,24 @@ final class MediaController: ObservableObject {
 
 enum ArtworkColor {
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    /// Копия обложки 512×512 для показа. Уменьшаем заранее с качественной интерполяцией:
+    /// SwiftUI при масштабировании большой картинки на лету даёт «мыло» и лесенку.
+    static func displayCopy(of image: NSImage, side: Int = 512) -> NSImage {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
+        // Мелкие обложки не растягиваем — пусть масштабирует экран.
+        guard cg.width > side || cg.height > side else { return image }
+        let scale = CGFloat(side) / CGFloat(max(cg.width, cg.height))
+        let w = Int((CGFloat(cg.width) * scale).rounded()), h = Int((CGFloat(cg.height) * scale).rounded())
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image }
+        ctx.interpolationQuality = .high
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let out = ctx.makeImage() else { return image }
+        // Размер в точках — половина пикселей, чтобы на Retina картинка шла 1:1.
+        return NSImage(cgImage: out, size: NSSize(width: w / 2, height: h / 2))
+    }
 
     /// Поле вокруг обложки в долях её стороны: свечение растекается на 5/8 стороны в каждую сторону.
     static let glowSpread: CGFloat = 0.625

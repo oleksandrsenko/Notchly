@@ -228,7 +228,7 @@ private struct ServiceButton: View {
     }
 }
 
-/// Логотипы сервисов: минималистичные белые знаки на полупрозрачном круге, векторные.
+/// Логотипы сервисов: минималистичные белые знаки на полупрозрачном скруглённом квадрате, векторные.
 struct ServiceLogo: View {
     var name: String
     var hovering = false
@@ -237,7 +237,8 @@ struct ServiceLogo: View {
         GeometryReader { geo in
             let s = min(geo.size.width, geo.size.height)
             ZStack {
-                Circle().fill(.white.opacity(hovering ? 0.16 : 0.08))
+                RoundedRectangle(cornerRadius: s * 0.26, style: .continuous)
+                    .fill(.white.opacity(hovering ? 0.16 : 0.08))
                 glyph(s).foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
             }
         }

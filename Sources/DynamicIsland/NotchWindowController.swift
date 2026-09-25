@@ -226,8 +226,8 @@ final class NotchWindowController {
             }
         }
         collapseWork = work
-        // Остров не закрывается сразу, если курсор случайно соскользнул: ждём 2,5 с.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+        // Остров не закрывается сразу, если курсор случайно соскользнул: ждём 2 с.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
 
     private func syncMouseEvents(inHotZone: Bool) {
