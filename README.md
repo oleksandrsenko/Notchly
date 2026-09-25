@@ -43,7 +43,7 @@ Also: rich-text notes, clipboard history, a Touch ID–protected API key vault, 
 
 ## Privacy
 
-Everything stays on your Mac: no server, no analytics, no telemetry. Secrets live only in the Keychain, the API vault is behind Touch ID, the clipboard skips password-manager entries, and notifications are read read-only. Details, screenshots and a full list of network calls: **[PRIVACY.md](PRIVACY.md)**.
+Everything stays on your Mac: no server, no analytics, no telemetry. Secrets live only in the Keychain (this device only), the API vault is behind Touch ID, data files are owner-only, the clipboard skips password-manager entries, notifications are read read-only, only web links are ever opened, and permissions are asked only when a feature needs them. Details, screenshots and a full list of network calls: **[PRIVACY.md](PRIVACY.md)**.
 
 ## Requirements
 

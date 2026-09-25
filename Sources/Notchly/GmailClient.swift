@@ -237,10 +237,24 @@ struct IMAPError: Error { var message: String }
 
 // MARK: - Соединение IMAP поверх TLS
 
+/// Потокобезопасный флаг «уже сделано» для одноразового возобновления continuation.
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    func claim() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if done { return false }
+        done = true
+        return true
+    }
+}
+
 private final class IMAPSession {
     struct Response { var ok: Bool; var data: Data }
 
     private let connection: NWConnection
+    private let queue = DispatchQueue(label: "notchly.imap")
     private var buffer = Data()
     private var tag = 0
 
@@ -250,16 +264,16 @@ private final class IMAPSession {
 
     func open() async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            var resumed = false
+            // Продолжение можно возобновить только один раз; состояния приходят на отдельной очереди.
+            let once = ResumeOnce()
             connection.stateUpdateHandler = { state in
-                guard !resumed else { return }
                 switch state {
-                case .ready: resumed = true; cont.resume()
-                case .failed(let e), .waiting(let e): resumed = true; cont.resume(throwing: e)
+                case .ready: if once.claim() { cont.resume() }
+                case .failed(let e), .waiting(let e): if once.claim() { cont.resume(throwing: e) }
                 default: break
                 }
             }
-            connection.start(queue: .global(qos: .utility))
+            connection.start(queue: queue)
         }
         _ = try await readUntil { $0.range(of: Data("\r\n".utf8)) != nil }
     }

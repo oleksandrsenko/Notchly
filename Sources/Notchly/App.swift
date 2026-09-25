@@ -66,6 +66,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 print(d.name, d.isConnected ? "подключено" : "не подключено", d.levels.map { "\($0.label) \($0.percent)%" })
             }
             print("Аксессуары на главной:", monitor.accessories.map(\.name))
+            var report = monitor.devices.map { d in
+                "\(d.name) \(d.isConnected ? "подключено" : "не подключено") " + d.levels.map { "\($0.label) \($0.percent)%" }.joined(separator: ", ")
+            }
+            report.append("IOBluetooth: " + DeviceBatteryMonitor.bluetoothLevels()
+                .map { "\($0.key): " + $0.value.map { "\($0.label) \($0.percent)%" }.joined(separator: ", ") }
+                .joined(separator: " | "))
+            let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Notchly/batteries-selftest.txt")
+            try? report.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
             exit(0)
         }
         if CommandLine.arguments.contains("--mixer-selftest") {
@@ -89,6 +98,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         LegacyMigration.run()
         controller = NotchWindowController()
         setupStatusItem()
+    }
+
+    @objc private func showAbout() {
+        let credits = NSAttributedString(
+            string: "Остров в вырезе экрана: музыка, задачи, таймеры, напоминания и уведомления.\nВсе данные хранятся только на этом Mac.",
+            attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }
 
     private func setupStatusItem() {
@@ -119,6 +136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(clear)
 
         menu.addItem(.separator())
+        let about = NSMenuItem(title: "О Notchly", action: #selector(showAbout), keyEquivalent: "")
+        about.target = self
+        menu.addItem(about)
         menu.addItem(NSMenuItem(title: "Выйти", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
         statusItem = item

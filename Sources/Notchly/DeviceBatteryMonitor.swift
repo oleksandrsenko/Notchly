@@ -51,6 +51,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 
     var onChargerConnected: ((BatteryInfo) -> Void)?
     var onAudioDeviceConnected: ((DeviceBattery) -> Void)?
+    /// Заряд подключённых наушников стал известен уже после показа карточки.
+    var onAudioDeviceUpdated: ((DeviceBattery) -> Void)?
 
     private var timer: Timer?
     private var loading = false
@@ -135,16 +137,29 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
         let lower = name.lowercased()
         let looksLikeHeadphones = ["airpods", "beats", "headphone", "наушник", "buds"].contains { lower.contains($0) }
         guard device.deviceClassMajor == kBluetoothDeviceClassMajorAudio || looksLikeHeadphones else { return }
-        // Заряд появляется в системе не сразу после подключения.
+        // Заряд появляется в системе не сразу после подключения: IOBluetooth обычно знает его раньше,
+        // чем system_profiler. Если сразу не нашли — перечитываем ещё раз и обновляем карточку на месте.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.refresh {
                 guard let self else { return }
-                let device = self.devices.first { $0.name == name && $0.isConnected }
-                    ?? DeviceBattery(name: name, symbol: Self.symbol(for: name, info: ["device_minorType": "Headphones"]),
-                                     levels: [])
+                let device = self.connectedDevice(named: name)
                 self.onAudioDeviceConnected?(device)
+                guard device.levels.isEmpty else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                    self?.refresh {
+                        guard let self else { return }
+                        let updated = self.connectedDevice(named: name)
+                        if !updated.levels.isEmpty { self.onAudioDeviceUpdated?(updated) }
+                    }
+                }
             }
         }
+    }
+
+    private func connectedDevice(named name: String) -> DeviceBattery {
+        if let known = devices.first(where: { $0.name == name && $0.isConnected }) { return known }
+        return DeviceBattery(name: name, symbol: Self.symbol(for: name, info: ["device_minorType": "Headphones"]),
+                             levels: Self.bluetoothLevels()[name] ?? [])
     }
 
     private static func readBluetooth() -> [DeviceBattery] {
@@ -162,6 +177,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
               let controllers = json["SPBluetoothDataType"] as? [[String: Any]] else { return [] }
 
         let hid = hidBatteries()
+        let direct = bluetoothLevels()
         var result: [DeviceBattery] = []
         for controller in controllers {
             for (key, connected) in [("device_connected", true), ("device_not_connected", false)] {
@@ -169,6 +185,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
                     for (name, value) in entry {
                         guard let info = value as? [String: Any] else { continue }
                         var levels = parseLevels(info, name: name)
+                        if levels.isEmpty, connected, let fromBluetooth = direct[name] { levels = fromBluetooth }
                         // Magic Mouse, клавиатура и трекпад: в новых macOS system_profiler не отдаёт их заряд,
                         // но он есть у HID-сервиса устройства.
                         if levels.isEmpty, connected, let percent = hidPercent(for: info, in: hid) {
@@ -182,6 +199,38 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
             }
         }
         return result.sorted { $0.name < $1.name }
+    }
+
+    /// Заряд прямо из IOBluetooth. У IOBluetoothDevice есть недокументированные свойства
+    /// batteryPercentLeft / Right / Case / Single — их читает и сама macOS. Нужны там, где system_profiler
+    /// молчит: AirPods Max на macOS 27 и первые секунды после подключения. Читаем только если объект
+    /// действительно отвечает на селектор, иначе KVC бросил бы исключение.
+    static func bluetoothLevels() -> [String: [DeviceBattery.Level]] {
+        guard Bundle.main.object(forInfoDictionaryKey: "NSBluetoothAlwaysUsageDescription") != nil,
+              let paired = IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] else { return [:] }
+        var result: [String: [DeviceBattery.Level]] = [:]
+        for device in paired where device.isConnected() {
+            func percent(_ key: String) -> Int? {
+                guard device.responds(to: NSSelectorFromString(key)),
+                      let value = (device.value(forKey: key) as? NSNumber)?.intValue,
+                      (1...100).contains(value) else { return nil }
+                return value
+            }
+            let name = device.name ?? ""
+            let isPro = name.localizedCaseInsensitiveContains("pro")
+            var levels: [DeviceBattery.Level] = []
+            if let left = percent("batteryPercentLeft") { levels.append(.init(label: "Левый", symbol: "airpod.left", percent: left)) }
+            if let right = percent("batteryPercentRight") { levels.append(.init(label: "Правый", symbol: "airpod.right", percent: right)) }
+            if let casing = percent("batteryPercentCase") {
+                levels.append(.init(label: "Кейс", symbol: isPro ? "airpodspro.chargingcase.wireless.fill" : "airpods.chargingcase.fill",
+                                    percent: casing))
+            }
+            if levels.isEmpty, let single = percent("batteryPercentSingle") ?? percent("batteryPercentCombined") {
+                levels.append(.init(label: "", symbol: "", percent: single))
+            }
+            if !levels.isEmpty, !name.isEmpty { result[name] = levels }
+        }
+        return result
     }
 
     private struct HIDBattery { var address: String; var productID: Int; var percent: Int }

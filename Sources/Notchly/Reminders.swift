@@ -112,20 +112,29 @@ final class CalendarService: ObservableObject {
     private let store = EKEventStore()
     private var timer: Timer?
 
+    private var started = false
+    private var hasUsageKey: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "NSCalendarsFullAccessUsageDescription") != nil
+    }
+
+    /// При запуске ничего не спрашиваем: подключаемся, только если доступ уже выдан.
     func start() {
-        guard Bundle.main.object(forInfoDictionaryKey: "NSCalendarsFullAccessUsageDescription") != nil else { return }
-        switch EKEventStore.authorizationStatus(for: .event) {
-        case .fullAccess: begin()
-        case .notDetermined:
-            store.requestFullAccessToEvents { [weak self] granted, _ in
-                guard granted else { return }
-                DispatchQueue.main.async { self?.begin() }
-            }
-        default: break
+        guard hasUsageKey, EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return }
+        begin()
+    }
+
+    /// Спросить доступ к календарю — когда он действительно нужен (первое открытие «Задач»).
+    func requestIfNeeded() {
+        guard hasUsageKey, !started, EKEventStore.authorizationStatus(for: .event) == .notDetermined else { return }
+        store.requestFullAccessToEvents { [weak self] granted, _ in
+            guard granted else { return }
+            DispatchQueue.main.async { self?.begin() }
         }
     }
 
     private func begin() {
+        guard !started else { return }
+        started = true
         reload()
         NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { [weak self] _ in
             self?.reload()
@@ -153,7 +162,8 @@ final class CalendarService: ObservableObject {
         let text = [event.location, event.notes].compactMap { $0 }.joined(separator: "\n")
         let links = TaskItem.links(in: text)
         let hosts = ["zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com", "facetime.apple.com", "telemost.yandex"]
-        return links.first { url in hosts.contains { url.host?.contains($0) == true } } ?? event.url ?? links.first
+        let eventURL = event.url.flatMap { TaskItem.isSafeLink($0) ? $0 : nil }
+        return links.first { url in hosts.contains { url.host?.contains($0) == true } } ?? eventURL ?? links.first
     }
 }
 

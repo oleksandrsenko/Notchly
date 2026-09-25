@@ -20,7 +20,11 @@ struct TasksView: View {
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.9), value: openedID)
+        .onAppear { onAppear?() }
     }
+
+    /// Вызывается при открытии «Задач» (там впервые спрашиваем доступ к календарю).
+    var onAppear: (() -> Void)? = nil
 
     private func close() { openedID = nil }
 
@@ -368,6 +372,13 @@ private struct PlainNotesEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
             onChange(tv.string)
+        }
+
+        /// По клику открываем только веб-ссылки; остальные схемы игнорируем.
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
+            if let url, TaskItem.isSafeLink(url) { NSWorkspace.shared.open(url) }
+            return true
         }
     }
 }

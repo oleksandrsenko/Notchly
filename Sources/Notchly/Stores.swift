@@ -32,7 +32,10 @@ enum LegacyMigration {
 private let supportDirectory: URL = {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     let dir = base.appendingPathComponent("Notchly", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    // Папка и файлы с задачами и заметками доступны только владельцу (700 / 600).
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                             attributes: [.posixPermissions: 0o700])
+    try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
     return dir
 }()
 
@@ -43,7 +46,9 @@ private func load<T: Decodable>(_ type: T.Type, from file: String) -> T? {
 
 private func save<T: Encodable>(_ value: T, to file: String) {
     guard let data = try? JSONEncoder().encode(value) else { return }
-    try? data.write(to: supportDirectory.appendingPathComponent(file), options: .atomic)
+    let url = supportDirectory.appendingPathComponent(file)
+    try? data.write(to: url, options: .atomic)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
 }
 
 // MARK: - Полка временных файлов
@@ -209,6 +214,12 @@ struct TaskItem: Identifiable, Codable, Equatable {
         guard !text.isEmpty, let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
         else { return [] }
         return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url)
+            .filter(isSafeLink)
+    }
+
+    /// Открываем только веб-ссылки: file://, x-apple… и прочие схемы из текста задачи не запускаем.
+    static func isSafeLink(_ url: URL) -> Bool {
+        ["http", "https"].contains(url.scheme?.lowercased() ?? "")
     }
 }
 

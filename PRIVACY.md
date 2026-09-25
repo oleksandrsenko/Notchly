@@ -6,9 +6,9 @@ Notchly lives in the most visible spot on your screen and touches personal thing
 
 | What | Where it lives | Who can see it |
 |---|---|---|
-| Tasks, notes, file shelf | `~/Library/Application Support/Notchly/*.json` | only you |
-| Clipboard history | `~/Library/Application Support/Notchly/clipboard.json` (owner-only file permissions), auto-expires | only you |
-| Gmail app password, Gemini API key | macOS Keychain | only Notchly, after macOS asks you |
+| Tasks, notes, file shelf, alarms | `~/Library/Application Support/Notchly/*.json` — folder `700`, files `600` (owner only) | only you |
+| Clipboard history | `~/Library/Application Support/Notchly/clipboard.json` (`600`), auto-expires | only you |
+| Gmail app password, Gemini API key | macOS Keychain, *this device only* (never synced to iCloud), readable only while the Mac is unlocked | only Notchly, after macOS asks you |
 | API key vault | macOS Keychain, unlocked with Touch ID / Mac password, auto-locks after 2 minutes | only you |
 | App notifications | read-only from macOS Notification Center database | never copied or sent anywhere |
 | Calendar events | EventKit, in memory only | never stored or sent |
@@ -38,12 +38,16 @@ There is **no server, no analytics, no telemetry, no crash reporting.**
 - Notchly reads the Notification Center database **read-only** (this is why it asks for Full Disk Access). It never modifies the database; “deleting” a notification only hides it inside Notchly.
 - During a Pomodoro focus session, notification cards are held back. At the end you see a single count instead of a stream of distractions — the contents are never shown on screen while you work.
 
+## Links are opened safely
+
+Links from task descriptions, calendar events and reminder cards are opened only if they are `http` / `https`. Anything else a text or an invite could contain — `file://`, custom app schemes — is ignored.
+
 ## Network access — only what you turn on
 
 | Feature | Connects to | When |
 |---|---|---|
 | Weather | `api.open-meteo.com` (latitude/longitude only, no account) | at most every 10 min |
-| Approximate location | `ipapi.co` | only if Location access is not granted, to pick the weather city |
+| Approximate location | `ipapi.co` | until you allow precise location (tap the weather card) |
 | Gmail | `imap.gmail.com:993` over TLS, with an app password | only if you connect Gmail |
 | Gemini | `generativelanguage.googleapis.com` | only when you send a prompt |
 | Album art, app icons | `itunes.apple.com` search / lookup (track title + artist, or an app’s bundle ID) | only when the player’s artwork is too small or an icon is missing |
@@ -62,6 +66,8 @@ Nothing else goes over the network.
 | Location | local weather | approximate location by IP (`ipapi.co`) |
 
 Every permission is optional; Notchly degrades gracefully.
+
+**Asked only when needed.** At first launch macOS asks only for Bluetooth (headphone connections). Accessibility is requested once — never again on later launches. Calendar access is asked the first time you open *Tasks*, precise location only when you tap the weather card, audio capture only once a per-app volume is actually changed (or a saved one is restored).
 
 ## Deleting your data
 

@@ -56,6 +56,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     /// Для снапшотов: вымышленная погода вместо настоящей геолокации.
     func debugSet(_ weather: Weather) {
         timer?.invalidate()
+        frozen = true
         self.weather = weather
     }
 
@@ -65,8 +66,11 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     private var timer: Timer?
     private var lastFetch = Date.distantPast
 
-    override init() {
+    /// live = false — для снапшотов: ни сети, ни геолокации.
+    init(live: Bool = true) {
         super.init()
+        frozen = !live
+        guard live else { return }
         location.delegate = self
         location.desiredAccuracy = kCLLocationAccuracyKilometer
         timer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
@@ -75,15 +79,27 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
         start()
     }
 
+    /// Снапшоты: погода вымышленная, никаких запросов в сеть и геолокации — иначе на скриншоты
+    /// попал бы настоящий город.
+    private var frozen = false
+
     func refresh(force: Bool = false) {
+        guard !frozen else { return }
         guard force || Date().timeIntervalSince(lastFetch) > 10 * 60 else { return }
         if let coordinate { fetch(coordinate) } else { start() }
     }
 
+    /// Точная геолокация: спрашиваем только по нажатию на карточку погоды.
+    var canAskForPreciseLocation: Bool { location.authorizationStatus == .notDetermined }
+
+    func askForPreciseLocation() {
+        guard canAskForPreciseLocation else { return }
+        location.requestWhenInUseAuthorization()
+    }
+
     private func start() {
+        guard !frozen else { return }
         switch location.authorizationStatus {
-        case .notDetermined:
-            location.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorized:
             location.requestLocation()
         default:
@@ -138,6 +154,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             let low = (daily?["temperature_2m_min"] as? [Double])?.first ?? temp
             DispatchQueue.main.async {
                 guard let self else { return }
+                guard !self.frozen else { return }
                 self.weather = Weather(temperature: Int(temp.rounded()), high: Int(high.rounded()),
                                        low: Int(low.rounded()), code: current["weather_code"] as? Int ?? 3,
                                        isDay: (current["is_day"] as? Int ?? 1) == 1, city: self.city,

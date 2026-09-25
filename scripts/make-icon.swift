@@ -1,5 +1,5 @@
 #!/usr/bin/env swift
-// Рисует иконку Notchly и собирает Resources/AppIcon.icns.
+// Рисует иконку Notchly (буква N с «островом» над ней) и собирает Resources/AppIcon.icns.
 // Запуск: swift scripts/make-icon.swift
 import AppKit
 
@@ -49,41 +49,30 @@ let image = NSImage(size: NSSize(width: side, height: side), flipped: true) { _ 
     NSGraphicsContext.saveGraphicsState()
     squircle.addClip()
 
-    // Монохромный фон: мягкий светло-серый градиент.
-    NSGradient(colors: [color(0xfbfbfd), color(0xe4e4e9), color(0xcfcfd6)],
-               atLocations: [0, 0.6, 1], colorSpace: .sRGB)!.draw(in: tile, angle: 90)
+    // Почти чёрный фон.
+    color(0x111111).setFill()
+    tile.fill()
 
-    // Сам «остров» — чёрная капсула с мягкой тенью.
-    let pill = NSBezierPath(roundedRect: NSRect(x: 222, y: 400, width: 580, height: 176), xRadius: 88, yRadius: 88)
-    NSGraphicsContext.saveGraphicsState()
-    let pillShadow = NSShadow()
-    pillShadow.shadowColor = .black.withAlphaComponent(0.35)
-    pillShadow.shadowBlurRadius = 36
-    pillShadow.shadowOffset = NSSize(width: 0, height: 20)
-    pillShadow.set()
-    color(0x000000).setFill()
-    pill.fill()
-    NSGraphicsContext.restoreGraphicsState()
-
-    // Едва заметный блик по верхней кромке капсулы.
-    NSGraphicsContext.saveGraphicsState()
-    pill.addClip()
-    NSGradient(colors: [color(0xffffff, 0.10), color(0xffffff, 0)])!
-        .draw(in: NSRect(x: 222, y: 400, width: 580, height: 60), angle: 90)
-    NSGraphicsContext.restoreGraphicsState()
-
-    // Глазок камеры справа.
-    let lens = NSRect(x: 690, y: 456, width: 64, height: 64)
-    NSGradient(colors: [color(0x2a2a2e), color(0x0b0b0d)])!.draw(in: NSBezierPath(ovalIn: lens), angle: -90)
-    NSGradient(colors: [color(0x3a3a40), color(0x121214)])!
-        .draw(in: NSBezierPath(ovalIn: lens.insetBy(dx: 16, dy: 16)), angle: -90)
-    color(0xffffff, 0.35).setFill()
-    NSBezierPath(ovalIn: NSRect(x: lens.minX + 22, y: lens.minY + 20, width: 9, height: 9)).fill()
+    // «N» со скруглёнными концами и «островом» над ней.
+    let stroke: CGFloat = 68
+    color(0xffffff).setFill()
+    color(0xffffff).setStroke()
+    let n = NSBezierPath()
+    n.move(to: NSPoint(x: 382, y: 713))
+    n.line(to: NSPoint(x: 382, y: 423))
+    n.line(to: NSPoint(x: 642, y: 713))
+    n.line(to: NSPoint(x: 642, y: 423))
+    n.lineWidth = stroke
+    n.lineCapStyle = .round
+    n.lineJoinStyle = .round
+    n.stroke()
+    let island = NSRect(x: 402, y: 276, width: 220, height: stroke)
+    NSBezierPath(roundedRect: island, xRadius: stroke / 2, yRadius: stroke / 2).fill()
 
     NSGraphicsContext.restoreGraphicsState()
 
     // Тонкая светлая кромка.
-    color(0x000000, 0.08).setStroke()
+    color(0xffffff, 0.06).setStroke()
     squircle.lineWidth = 3
     squircle.stroke()
     return true

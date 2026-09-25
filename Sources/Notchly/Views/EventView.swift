@@ -151,17 +151,23 @@ private struct CompactDeviceEvent: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ring(level: buds, symbol: device.symbol)
-                .padding(.leading, 12)
+            // Слева наушники: кольцо и процент; справа кейс: процент и кольцо.
+            HStack(spacing: 5) {
+                ring(level: buds, symbol: device.symbol)
+                if let buds { percent(buds.percent) }
+            }
+            .padding(.leading, 12)
             Spacer(minLength: notchWidth)
-            if casing != nil {
-                ring(level: casing, symbol: caseSymbol)
-                    .padding(.trailing, 12)
-            } else if let buds {
-                Text("\(buds.percent)%")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(BatteryTint.color(buds.percent))
+            if let casing {
+                HStack(spacing: 5) {
+                    percent(casing.percent)
+                    ring(level: casing, symbol: caseSymbol)
+                }
+                .padding(.trailing, 12)
+            } else if buds == nil {
+                Text("Подключено")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
                     .padding(.trailing, 14)
             }
         }
@@ -169,6 +175,15 @@ private struct CompactDeviceEvent: View {
         .opacity(appeared ? 1 : 0)
         .onAppear { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { appeared = true } }
         .help("Нажмите, чтобы увидеть заряд подробнее")
+    }
+
+    private func percent(_ value: Int) -> some View {
+        Text("\(value)%")
+            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(BatteryTint.color(value))
+            .contentTransition(.numericText(value: Double(value)))
+            .fixedSize()
     }
 
     private func ring(level: DeviceBattery.Level?, symbol: String) -> some View {

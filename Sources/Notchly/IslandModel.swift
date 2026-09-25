@@ -113,6 +113,7 @@ enum IslandMetrics {
     static let notificationSize = CGSize(width: 430, height: 76)
     static let reminderSize = CGSize(width: 520, height: 80)
     static let focusWing: CGFloat = 56
+    static let deviceWing: CGFloat = 84
     /// Запас окна вокруг острова, чтобы тень и пружинная анимация не обрезались.
     static let windowSize = CGSize(width: 760, height: 320)
     static let spring = Animation.spring(response: 0.46, dampingFraction: 0.84)
@@ -171,7 +172,7 @@ final class IslandModel: ObservableObject {
     let gemini = GeminiAssistant()
     let batteries = DeviceBatteryMonitor()
     let keys = MediaKeyInterceptor()
-    let weather = WeatherService()
+    let weather: WeatherService
     let vault = KeyVault()
     let gmail = GmailClient()
     let systemNotifications = SystemNotificationsReader()
@@ -193,6 +194,7 @@ final class IslandModel: ObservableObject {
         notes = NotesStore(persistent: persistent)
         tasks = TasksStore(persistent: persistent)
         reminders = ReminderCenter(tasks: tasks)
+        weather = WeatherService(live: persistent)
         alarms = AlarmStore(persistent: persistent)
         tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .home
 
@@ -200,6 +202,7 @@ final class IslandModel: ObservableObject {
         clipboard.onCopy = { [weak self] group in self?.showClipPeek(group) }
         batteries.onChargerConnected = { [weak self] info in self?.showEvent(.charging(info)) }
         batteries.onAudioDeviceConnected = { [weak self] device in self?.showEvent(.device(device)) }
+        batteries.onAudioDeviceUpdated = { [weak self] device in self?.updateDevice(device) }
         systemNotifications.onNew = { [weak self] item in self?.showNotification(item) }
         reminders.onFire = { [weak self] reminder in self?.presentReminder(reminder) }
         focus.onTransition = { [weak self] transition in
@@ -269,7 +272,7 @@ final class IslandModel: ObservableObject {
         }
         if let event {
             if event.isCompact {
-                return CGSize(width: n.width + IslandMetrics.hudWing * 2, height: n.height)
+                return CGSize(width: n.width + IslandMetrics.deviceWing * 2, height: n.height)
             }
             if !eventExpanded {
                 return CGSize(width: n.width + 18, height: n.height + 24)
@@ -413,6 +416,17 @@ final class IslandModel: ObservableObject {
     private func showNotification(_ item: AppNotification) {
         if focus.isFocusing { return focus.holdNotification() }
         showEvent(.notification(item))
+    }
+
+    /// Заряд пришёл позже карточки — обновляем её на месте, не показывая заново.
+    func updateDevice(_ device: DeviceBattery) {
+        switch event {
+        case .device(let shown) where shown.name == device.name:
+            withAnimation(.smooth(duration: 0.3)) { event = .device(device) }
+        case .deviceSheet(let shown) where shown.name == device.name:
+            withAnimation(.smooth(duration: 0.3)) { event = .deviceSheet(device) }
+        default: break
+        }
     }
 
     /// Нажали на компактное событие наушников — показываем подробное окно.

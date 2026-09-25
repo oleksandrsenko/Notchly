@@ -13,6 +13,7 @@ struct NotesView: View {
     @ObservedObject var tasks: TasksStore
     var gemini: GeminiAssistant
     var focus: FocusTimer
+    var calendar: CalendarService? = nil
     @ViewState private var direction: Edge = .trailing
     @ViewState private var richController = RichTextController()
     @FocusState private var editorFocused: Bool
@@ -89,7 +90,8 @@ struct NotesView: View {
             ZStack {
                 switch mode {
                 case .notes: notes.transition(.pageSlide(direction))
-                case .tasks: TasksView(store: tasks, gemini: gemini, focus: focus).transition(.pageSlide(direction))
+                case .tasks: TasksView(store: tasks, gemini: gemini, focus: focus, onAppear: { calendar?.requestIfNeeded() })
+                    .transition(.pageSlide(direction))
                 case .clipboard: ClipboardView(clipboard: clipboard).transition(.pageSlide(direction))
                 case .vault: KeyVaultView(vault: vault).transition(.pageSlide(direction))
                 }

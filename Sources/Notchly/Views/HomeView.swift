@@ -205,8 +205,13 @@ private struct WeatherCard: View {
         .padding(.vertical, 12)
         .frame(width: 132, height: 104, alignment: .topLeading)
         .contentShape(Rectangle())
-        .onTapGesture { if let w = service.weather { NSWorkspace.shared.open(w.forecastURL) } }
-        .help("Открыть прогноз погоды на несколько дней")
+        .onTapGesture {
+            // Пока погода определена по IP, нажатие предлагает точную геолокацию; потом — открывает прогноз.
+            if service.canAskForPreciseLocation { service.askForPreciseLocation() }
+            else if let w = service.weather { NSWorkspace.shared.open(w.forecastURL) }
+        }
+        .help(service.canAskForPreciseLocation ? "Нажмите, чтобы уточнить город по геолокации"
+                                                : "Открыть прогноз погоды на несколько дней")
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(LinearGradient(colors: [Color(white: 0.16), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)))
@@ -410,22 +415,9 @@ private struct BatteryCarousel: View {
 
     static func levelColor(_ percent: Int) -> Color { BatteryTint.color(percent) }
 
-    /// Для AirPods — пара наушников на фоне кейса, как на фото; для остальных — обычный рисунок.
-    @ViewBuilder
+    /// Для AirPods — только кейс; для остальных наушников — их рисунок (AirPods Max — в цвете Midnight).
     private func headphonesArt(_ device: DeviceBattery) -> some View {
-        switch DeviceArt.Kind(device: device) {
-        case .airPodsPro, .airPods:
-            let pro = DeviceArt.Kind(device: device).isPro
-            ZStack(alignment: .bottomLeading) {
-                DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 40)
-                    .frame(width: 54, height: 48, alignment: .bottomTrailing)
-                EarbudPair(pro: pro, height: 38)
-                    .offset(x: -4, y: 2)
-            }
-            .frame(width: 54, height: 48)
-        case .symbol:
-            DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 50)
-        }
+        DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 56)
     }
 
     private func info(title: String, percent: Int?, charging: Bool = false, note: String?, color: Color? = nil) -> some View {

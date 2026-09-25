@@ -29,11 +29,13 @@ enum Keychain {
     @discardableResult
     static func set(_ data: Data, service: String, account: String) -> Bool {
         let query = baseQuery(service: service, account: account)
-        let update = [kSecValueData as String: data]
+        let update: [String: Any] = [kSecValueData as String: data,
+                                     kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
         if SecItemUpdate(query as CFDictionary, update as CFDictionary) == errSecSuccess { return true }
         var add = query
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        // Только пока Mac разблокирован и только на этом Mac: секреты не уходят в iCloud и в бэкапы на другие устройства.
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 

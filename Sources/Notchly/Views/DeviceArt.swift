@@ -175,6 +175,18 @@ private struct BudHead: View {
 private struct SymbolArt: View {
     var name: String
 
+    private static let silver = LinearGradient(
+        stops: [.init(color: Color(white: 1), location: 0),
+                .init(color: Color(white: 0.8), location: 0.55),
+                .init(color: Color(white: 0.92), location: 1)],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
+    /// AirPods Max в цвете Midnight: тёмно-синий алюминий с мягким бликом сверху.
+    private static let midnight = LinearGradient(
+        stops: [.init(color: Color(red: 0.42, green: 0.48, blue: 0.62), location: 0),
+                .init(color: Color(red: 0.24, green: 0.29, blue: 0.40), location: 0.45),
+                .init(color: Color(red: 0.15, green: 0.18, blue: 0.26), location: 1)],
+        startPoint: .top, endPoint: .bottom)
+
     var body: some View {
         ZStack {
             Ellipse()
@@ -183,11 +195,7 @@ private struct SymbolArt: View {
                 .offset(y: 60)
             Image(systemName: name)
                 .font(.system(size: 92, weight: .light))
-                .foregroundStyle(LinearGradient(
-                    stops: [.init(color: Color(white: 1), location: 0),
-                            .init(color: Color(white: 0.8), location: 0.55),
-                            .init(color: Color(white: 0.92), location: 1)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                .foregroundStyle(name.contains("airpodsmax") ? Self.midnight : Self.silver)
         }
     }
 }

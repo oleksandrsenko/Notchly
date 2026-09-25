@@ -14,7 +14,12 @@ final class MediaKeyInterceptor {
     private var retryTimer: Timer?
 
     func start() {
-        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        // Системное окно «Разрешить Универсальный доступ» показываем один раз за всё время,
+        // а не при каждом запуске; дальше тихо ждём, пока доступ выдадут в Настройках.
+        let askedKey = "accessibility.prompted"
+        let shouldPrompt = !UserDefaults.standard.bool(forKey: askedKey)
+        UserDefaults.standard.set(true, forKey: askedKey)
+        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: shouldPrompt] as CFDictionary
         if AXIsProcessTrustedWithOptions(prompt) {
             install()
             return
