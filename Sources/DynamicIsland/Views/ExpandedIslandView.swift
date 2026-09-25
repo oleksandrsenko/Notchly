@@ -13,6 +13,7 @@ struct ExpandedIslandView: View {
         VStack(spacing: 0) {
             header
                 .frame(height: model.notchSize.height)
+                .staggered(0)
             ZStack {
                 page(for: model.tab)
                     .id(model.tab)
@@ -22,6 +23,7 @@ struct ExpandedIslandView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
+            .staggered(1)
             .padding(.horizontal, 22)
             .padding(.top, 8)
             .padding(.bottom, 18)
@@ -68,9 +70,10 @@ struct ExpandedIslandView: View {
     @ViewBuilder
     private func page(for tab: IslandTab) -> some View {
         switch tab {
+        case .home: HomeView(model: model, media: media, batteries: model.batteries) { select(.music) }
         case .music: MusicPlayerView(media: media, ns: ns)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
-        case .notes: NotesView(store: model.notes)
+        case .notes: NotesView(store: model.notes, clipboard: model.clipboard)
         case .controls: ControlsView(volume: model.volume, brightness: model.brightness)
         }
     }
@@ -90,6 +93,7 @@ private struct TabButton: View {
             Image(systemName: tab.icon)
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(selected ? .black : .white.opacity(hovering ? 1 : 0.65))
+                .symbolEffect(.bounce, value: selected)
                 .frame(width: 30, height: 22)
                 .background {
                     if selected {
@@ -121,7 +125,7 @@ private struct TabButton: View {
 /// Часы и заряд батареи в правом углу шапки.
 private struct StatusCluster: View {
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 15)) { ctx in
+        TimelineView(.everyMinute) { ctx in
             HStack(spacing: 10) {
                 if let battery = BatteryInfo.read() {
                     HStack(spacing: 4) {

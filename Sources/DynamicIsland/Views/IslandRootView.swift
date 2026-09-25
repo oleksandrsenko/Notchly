@@ -58,6 +58,7 @@ struct IslandRootView: View {
         .animation(IslandMetrics.spring, value: media.showsLiveActivity)
         .animation(IslandMetrics.spring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
+        .animation(IslandMetrics.spring, value: model.clipPeek)
         .preferredColorScheme(.dark)
         .onChange(of: model.isDropTargeted) { _, targeted in
             if targeted { model.expand(to: .shelf) }
@@ -73,6 +74,11 @@ struct IslandRootView: View {
                     removal: .opacity.animation(.easeOut(duration: 0.12))))
         } else if let hud = model.hud {
             HUDView(state: hud, notchWidth: model.notchSize.width)
+                .transition(.opacity.combined(with: .blurReplace))
+        } else if let group = model.clipPeek {
+            ClipPeekView(group: group, icon: model.clipboard.icon(for: group.bundleID),
+                         notchWidth: model.notchSize.width)
+                .id(group.items.first?.id)
                 .transition(.opacity.combined(with: .blurReplace))
         } else if media.showsLiveActivity || (model.peek && media.hasTrack) {
             CompactMusicView(media: media, model: model, ns: ns)

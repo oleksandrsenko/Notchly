@@ -51,6 +51,15 @@ final class VolumeController: ObservableObject {
 
     func toggleMute() { setMuted(!isMuted) }
 
+    /// Шаг как у системных клавиш: 1/16, с ⌥⇧ — 1/64.
+    func step(up: Bool, fine: Bool) {
+        let unit: Float = fine ? 1 / 64 : 1 / 16
+        if up && isMuted { setMuted(false) }
+        let target = ((volume / unit).rounded() + (up ? 1 : -1)) * unit
+        set(target)
+        if target <= 0 { setMuted(true) }
+    }
+
     private func setMuted(_ muted: Bool) {
         lastLocalChange = Date()
         var m: UInt32 = muted ? 1 : 0
@@ -135,6 +144,11 @@ final class BrightnessController: ObservableObject {
         lastLocalChange = Date()
         _ = setFn?(display, clamped)
         brightness = clamped
+    }
+
+    func step(up: Bool, fine: Bool) {
+        let unit: Float = fine ? 1 / 64 : 1 / 16
+        set(((brightness / unit).rounded() + (up ? 1 : -1)) * unit)
     }
 
     private func read() -> Float? {

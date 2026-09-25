@@ -1,35 +1,90 @@
 import SwiftUI
 
 struct NotesView: View {
+    enum Mode: String, CaseIterable {
+        case notes = "Заметки", clipboard = "Буфер обмена"
+    }
+
     @ObservedObject var store: NotesStore
+    @ObservedObject var clipboard: ClipboardMonitor
     @FocusState private var editorFocused: Bool
+    @ViewState private var mode: Mode = .notes
+    @Namespace private var segmentNS
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(spacing: 6) {
-                HStack {
-                    Text("Заметки")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                    Spacer()
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                HStack(spacing: 2) {
+                    ForEach(Mode.allCases, id: \.self) { item in
+                        Button {
+                            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { mode = item }
+                        } label: {
+                            Text(item.rawValue)
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundStyle(mode == item ? .black : .white.opacity(0.6))
+                                .padding(.horizontal, 10)
+                                .frame(height: 22)
+                                .background {
+                                    if mode == item {
+                                        Capsule().fill(.white).matchedGeometryEffect(id: "segment", in: segmentNS)
+                                    }
+                                }
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(PressableStyle())
+                    }
+                }
+                .padding(2)
+                .background(Capsule().fill(.white.opacity(0.08)))
+
+                Spacer()
+
+                if mode == .notes {
                     IconButton(systemName: "square.and.pencil", size: 12, padding: 5) {
                         store.create()
                         editorFocused = true
                     }
                     .foregroundStyle(.white.opacity(0.8))
+                    .transition(.blurFade)
+                } else if !clipboard.groups.isEmpty {
+                    Button("Очистить") { clipboard.clear() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .transition(.blurFade)
                 }
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 3) {
-                        ForEach(store.notes) { note in
-                            NoteRow(note: note, selected: note.id == store.selectedID) {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    store.selectedID = note.id
-                                }
-                            } onDelete: {
-                                store.delete(note.id)
+            }
+
+            ZStack {
+                if mode == .notes {
+                    notes
+                        .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .leading))
+                            .combined(with: .opacity))
+                } else {
+                    ClipboardView(clipboard: clipboard)
+                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing))
+                            .combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+        }
+        .onDisappear { store.persist() }
+    }
+
+    private var notes: some View {
+        HStack(spacing: 12) {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 3) {
+                    ForEach(store.notes) { note in
+                        NoteRow(note: note, selected: note.id == store.selectedID) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                store.selectedID = note.id
                             }
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                        } onDelete: {
+                            store.delete(note.id)
                         }
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
             }
@@ -47,7 +102,7 @@ struct NotesView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 8)
                         .id(id)
-                        .transition(.opacity)
+                        .transition(.blurFade)
                     if store.selected?.text.isEmpty ?? true {
                         Text("Начните печатать…")
                             .font(.system(size: 13))
@@ -61,8 +116,16 @@ struct NotesView: View {
             .animation(.easeOut(duration: 0.2), value: editorFocused)
             .onTapGesture { editorFocused = true }
         }
-        .onDisappear { store.persist() }
     }
+}
+
+/// Короткое время: сегодня — «15:42», раньше — «24 сент., 15:42».
+func shortTimestamp(_ date: Date) -> String {
+    let ru = Locale(identifier: "ru_RU")
+    if Calendar.current.isDateInToday(date) {
+        return date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(ru))
+    }
+    return date.formatted(.dateTime.day().month(.abbreviated).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(ru))
 }
 
 private struct NoteRow: View {
@@ -79,7 +142,7 @@ private struct NoteRow: View {
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(.white.opacity(selected ? 1 : 0.75))
                     .lineLimit(1)
-                Text(note.updatedAt, format: .relative(presentation: .named))
+                Text(shortTimestamp(note.updatedAt))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.white.opacity(0.4))
             }

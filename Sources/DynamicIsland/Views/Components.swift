@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Обложка с плавной сменой картинки и заглушкой, когда обложки нет.
+/// Обложка с плавной сменой картинки. При смене трека старая обложка растворяется
+/// с размытием, новая проявляется поверх — без вспышек заглушки.
 struct ArtworkView: View {
     var image: NSImage?
     var accent: Color
@@ -8,28 +9,68 @@ struct ArtworkView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(LinearGradient(colors: [accent.opacity(0.55), accent.opacity(0.15)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 200, weight: .semibold))
-                        .minimumScaleFactor(0.01)
-                        .padding(cornerRadius * 1.2)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
+            Color(white: 0.08)
+            if image == nil {
+                LinearGradient(colors: [accent.opacity(0.45), accent.opacity(0.12)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .overlay {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 200, weight: .semibold))
+                            .minimumScaleFactor(0.01)
+                            .padding(cornerRadius * 1.2)
+                            .foregroundStyle(.white.opacity(0.35))
+                    }
+                    .transition(.opacity)
+            }
             if let image {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .id(ObjectIdentifier(image))
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 1.12)),
-                        removal: .opacity))
+                    .transition(.blurFade)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
+}
+
+private struct BlurFadeModifier: ViewModifier {
+    var active: Bool
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: active ? 10 : 0)
+            .opacity(active ? 0 : 1)
+            .scaleEffect(active ? 1.06 : 1)
+    }
+}
+
+extension AnyTransition {
+    /// Мягкое появление/исчезновение с размытием.
+    static var blurFade: AnyTransition {
+        .modifier(active: BlurFadeModifier(active: true), identity: BlurFadeModifier(active: false))
+    }
+}
+
+/// Появление с задержкой: элементы раскрытого острова выплывают друг за другом.
+struct StaggeredAppear: ViewModifier {
+    var index: Int
+    @ViewState private var visible = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(visible ? 1 : 0)
+            .offset(y: visible ? 0 : 8)
+            .blur(radius: visible ? 0 : 6)
+            .onAppear {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.82).delay(0.04 + Double(index) * 0.045)) {
+                    visible = true
+                }
+            }
+    }
+}
+
+extension View {
+    func staggered(_ index: Int) -> some View { modifier(StaggeredAppear(index: index)) }
 }
 
 /// Эквалайзер, который «танцует», пока играет музыка.
@@ -61,7 +102,7 @@ struct EqualizerView: View {
     }
 }
 
-/// Кнопка-иконка с подсветкой при наведении и «проседанием» при нажатии.
+/// Кнопка-иконка: при наведении слегка увеличивается, при нажатии «проседает» и подпрыгивает.
 struct IconButton: View {
     var systemName: String
     var size: CGFloat = 16
@@ -70,18 +111,24 @@ struct IconButton: View {
     var action: () -> Void
 
     @ViewState private var hovering = false
+    @ViewState private var taps = 0
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            taps += 1
+            action()
+        } label: {
             Image(systemName: systemName)
                 .font(.system(size: size, weight: weight))
-                .contentTransition(.symbolEffect(.replace))
+                .contentTransition(.symbolEffect(.replace.downUp))
+                .symbolEffect(.bounce.down, value: taps)
+                .opacity(hovering ? 1 : 0.88)
+                .scaleEffect(hovering ? 1.1 : 1)
                 .frame(width: size + padding * 2, height: size + padding * 2)
-                .background(Circle().fill(.white.opacity(hovering ? 0.12 : 0)))
-                .contentShape(Circle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
-        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+        .onHover { h in withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { hovering = h } }
     }
 }
 

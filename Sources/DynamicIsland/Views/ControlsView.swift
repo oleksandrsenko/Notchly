@@ -24,7 +24,6 @@ struct ControlsView: View {
                 hint: "Недоступно для этого дисплея") {
                 CapsuleSlider(value: Double(brightness.brightness),
                               icon: brightness.brightness < 0.33 ? "sun.min.fill" : "sun.max.fill",
-                              tint: Color(red: 1, green: 0.86, blue: 0.4),
                               onChange: { brightness.set(Float($0)) })
             }
         }

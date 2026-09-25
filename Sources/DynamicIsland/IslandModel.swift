@@ -3,11 +3,12 @@ import SwiftUI
 import Combine
 
 enum IslandTab: String, CaseIterable, Identifiable {
-    case music, shelf, notes, controls
+    case home, music, shelf, notes, controls
     var id: String { rawValue }
 
     var icon: String {
         switch self {
+        case .home: return "square.grid.2x2.fill"
         case .music: return "music.note"
         case .shelf: return "tray.full.fill"
         case .notes: return "note.text"
@@ -17,6 +18,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .home: return "Главная"
         case .music: return "Музыка"
         case .shelf: return "Полка"
         case .notes: return "Заметки"
@@ -34,7 +36,7 @@ struct HUDState: Equatable {
 
 enum IslandMetrics {
     static let expandedWidth: CGFloat = 640
-    static let expandedContentHeight: CGFloat = 172
+    static let expandedContentHeight: CGFloat = 180
     static let compactWing: CGFloat = 40
     static let hudWing: CGFloat = 72
     static let peekWing: CGFloat = 56
@@ -53,6 +55,8 @@ final class IslandModel: ObservableObject {
     @Published var hud: HUDState?
     @Published var peek = false
     @Published var isDropTargeted = false
+    /// Короткое уведомление «скопировано из …» по бокам выреза.
+    @Published var clipPeek: ClipGroup?
     @Published var notchSize = CGSize(width: 200, height: 32)
     @Published var hasPhysicalNotch = true
 
@@ -61,13 +65,20 @@ final class IslandModel: ObservableObject {
     let brightness = BrightnessController()
     let shelf = ShelfStore()
     let notes = NotesStore()
+    let clipboard = ClipboardMonitor()
+    let batteries = DeviceBatteryMonitor()
+    let keys = MediaKeyInterceptor()
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
+    private var clipTask: DispatchWorkItem?
     private var bag = Set<AnyCancellable>()
 
     init() {
-        tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .music
+        tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .home
+
+        keys.handler = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
+        clipboard.onCopy = { [weak self] group in self?.showClipPeek(group) }
 
         volume.onExternalChange = { [weak self] value, muted in
             self?.showHUD(HUDState(kind: .volume, value: value, muted: muted))
@@ -100,7 +111,7 @@ final class IslandModel: ObservableObject {
         if isExpanded {
             return CGSize(width: IslandMetrics.expandedWidth, height: n.height + IslandMetrics.expandedContentHeight)
         }
-        if hud != nil {
+        if hud != nil || clipPeek != nil {
             return CGSize(width: n.width + IslandMetrics.hudWing * 2, height: n.height)
         }
         if peek && media.hasTrack {
@@ -124,6 +135,8 @@ final class IslandModel: ObservableObject {
         guard !isExpanded else { return }
         hud = nil
         peek = false
+        clipPeek = nil
+        if tab == .home { batteries.refresh() }
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         withAnimation(IslandMetrics.spring) { isExpanded = true }
     }
@@ -138,6 +151,7 @@ final class IslandModel: ObservableObject {
         hudTask?.cancel()
         withAnimation(IslandMetrics.spring) {
             peek = false
+            clipPeek = nil
             hud = state
         }
         let task = DispatchWorkItem { [weak self] in
@@ -145,6 +159,37 @@ final class IslandModel: ObservableObject {
         }
         hudTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6, execute: task)
+    }
+
+    private func handleKey(_ key: MediaKeyInterceptor.Key, fine: Bool) {
+        switch key {
+        case .volumeUp, .volumeDown:
+            volume.step(up: key == .volumeUp, fine: fine)
+        case .mute:
+            volume.toggleMute()
+        case .brightnessUp, .brightnessDown:
+            brightness.step(up: key == .brightnessUp, fine: fine)
+        }
+        switch key {
+        case .volumeUp, .volumeDown, .mute:
+            showHUD(HUDState(kind: .volume, value: volume.volume, muted: volume.isMuted))
+        case .brightnessUp, .brightnessDown:
+            showHUD(HUDState(kind: .brightness, value: brightness.brightness))
+        }
+    }
+
+    func showClipPeek(_ group: ClipGroup) {
+        guard !isExpanded, hud == nil else { return }
+        clipTask?.cancel()
+        withAnimation(IslandMetrics.spring) {
+            peek = false
+            clipPeek = group
+        }
+        let task = DispatchWorkItem { [weak self] in
+            withAnimation(IslandMetrics.softSpring) { self?.clipPeek = nil }
+        }
+        clipTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: task)
     }
 
     func showPeek() {

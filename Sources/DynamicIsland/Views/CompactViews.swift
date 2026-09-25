@@ -70,13 +70,14 @@ struct HUDView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: state.value)
                 .frame(width: 26)
                 .padding(.leading, 14)
             Spacer(minLength: notchWidth)
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.18))
                 Capsule()
-                    .fill(state.kind == .brightness ? Color.yellow.gradient : Color.white.gradient)
+                    .fill(Color.white.gradient)
                     .frame(width: 48 * shown)
             }
             .frame(width: 48, height: 5)
@@ -84,5 +85,34 @@ struct HUDView: View {
             .animation(.spring(response: 0.25, dampingFraction: 0.8), value: shown)
         }
         .frame(maxHeight: .infinity)
+    }
+}
+
+/// «Скопировано из …»: иконка приложения слева от выреза, значок буфера справа.
+struct ClipPeekView: View {
+    var group: ClipGroup
+    var icon: NSImage
+    var notchWidth: CGFloat
+    @ViewState private var appeared = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Image(nsImage: icon)
+                .resizable()
+                .frame(width: 20, height: 20)
+                .scaleEffect(appeared ? 1 : 0.4)
+                .padding(.leading, 16)
+            Spacer(minLength: notchWidth)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.green)
+                .symbolEffect(.bounce, value: appeared)
+                .scaleEffect(appeared ? 1 : 0.4)
+                .padding(.trailing, 18)
+        }
+        .frame(maxHeight: .infinity)
+        .onAppear {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.55).delay(0.05)) { appeared = true }
+        }
     }
 }

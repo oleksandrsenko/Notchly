@@ -24,11 +24,6 @@ final class MediaController: ObservableObject {
     var hasTrack: Bool { !title.isEmpty }
     var trackID: String { "\(title)|\(artist)|\(album)" }
 
-    var sourceIcon: NSImage? {
-        guard let bundleID, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
-        return NSWorkspace.shared.icon(forFile: url.path)
-    }
-
     func position(at date: Date = Date()) -> Double {
         guard isPlaying else { return elapsed }
         let value = elapsed + date.timeIntervalSince(timestamp)
@@ -52,6 +47,12 @@ final class MediaController: ObservableObject {
     private var fallbackTimer: Timer?
     private var liveActivityWork: DispatchWorkItem?
     private var scriptArtworkTrack = ""
+    /// Отложенная очистка: браузеры на мгновение присылают пустое состояние при переключении.
+    private var clearWork: DispatchWorkItem?
+    /// После нажатия ⏯ плеер ещё пару сотен миллисекунд присылает старое состояние —
+    /// не даём кнопке мигать туда-обратно.
+    private var expectedPlaying: Bool?
+    private var expectedUntil = Date.distantPast
 
     init() {
         signal(SIGPIPE, SIG_IGN)
@@ -72,7 +73,9 @@ final class MediaController: ObservableObject {
         let now = Date()
         elapsed = position(at: now)
         timestamp = now
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { isPlaying.toggle() }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) { isPlaying.toggle() }
+        expectedPlaying = isPlaying
+        expectedUntil = now.addingTimeInterval(1.2)
         updateLiveActivity()
         send("toggle", script: .playPause)
     }
@@ -174,13 +177,17 @@ final class MediaController: ObservableObject {
             adapterAlive = true
             if msg["empty"] as? Bool == true || (msg["title"] as? String ?? "").isEmpty {
                 adapterEmpty = true
-                if case .adapter = source { clear() }
+                if case .adapter = source { scheduleClear() }
                 return
             }
             adapterEmpty = false
             source = .adapter
+            cancelClear()
 
-            let playing = msg["playing"] as? Bool ?? false
+            var playing = msg["playing"] as? Bool ?? false
+            if let expected = expectedPlaying, Date() < expectedUntil {
+                if playing != expected { playing = expected } else { expectedPlaying = nil }
+            }
             var elapsed = msg["elapsed"] as? Double ?? 0
             var stamp = Date()
             if let ts = msg["timestamp"] as? Double {
@@ -192,9 +199,11 @@ final class MediaController: ObservableObject {
                 stamp = Date()
             }
 
+            let incomingID = "\(msg["title"] as? String ?? "")|\(msg["artist"] as? String ?? "")|\(msg["album"] as? String ?? "")"
             var artwork: ArtworkUpdate = .keep
             if msg["hasArtwork"] as? Bool == false {
-                artwork = .clear
+                // Для того же трека обложка иногда пропадает на мгновение — оставляем старую.
+                artwork = incomingID == trackID ? .keep : .clear
             } else if let b64 = msg["artwork"] as? String, let data = Data(base64Encoded: b64),
                       let image = NSImage(data: data) {
                 artwork = .set(image)
@@ -217,9 +226,10 @@ final class MediaController: ObservableObject {
     private func pollFallback() {
         guard !adapterAlive || adapterEmpty else { return }
         guard let snap = scripts.poll() else {
-            if case .script = source { clear(); source = .adapter }
+            if case .script = source { scheduleClear() }
             return
         }
+        cancelClear()
         source = .script(snap.player)
         var artwork: ArtworkUpdate = .keep
         let key = "\(snap.title)|\(snap.artist)"
@@ -255,16 +265,19 @@ final class MediaController: ObservableObject {
         let newID = "\(title)|\(artist)|\(album)"
         let changed = newID != trackID
 
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
-            self.title = title
-            self.artist = artist
-            self.album = album
-            self.duration = duration
-            self.elapsed = elapsed
-            self.timestamp = timestamp
+        withAnimation(changed ? .smooth(duration: 0.7) : .spring(response: 0.4, dampingFraction: 0.8)) {
+            if changed {
+                self.title = title
+                self.artist = artist
+                self.album = album
+            }
+            if abs(self.duration - duration) > 0.5 { self.duration = duration }
             self.isPlaying = playing
             self.bundleID = bundleID
         }
+        // Позицию обновляем без анимации — иначе полоска прогресса «прыгает».
+        self.elapsed = elapsed
+        self.timestamp = timestamp
         switch artwork {
         case .keep: break
         case .clear: setArtwork(nil)
@@ -276,10 +289,26 @@ final class MediaController: ObservableObject {
 
     private func setArtwork(_ image: NSImage?) {
         let color = image.flatMap(ArtworkColor.accent(of:)) ?? .white
-        withAnimation(.easeInOut(duration: 0.6)) {
+        withAnimation(.smooth(duration: 0.8)) {
             artwork = image
             accent = color
         }
+    }
+
+    private func scheduleClear() {
+        guard clearWork == nil, hasTrack else { return }
+        let work = DispatchWorkItem { [weak self] in
+            self?.clearWork = nil
+            self?.clear()
+            self?.source = .adapter
+        }
+        clearWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    }
+
+    private func cancelClear() {
+        clearWork?.cancel()
+        clearWork = nil
     }
 
     private func clear() {

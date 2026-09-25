@@ -28,17 +28,8 @@ struct MusicPlayerView: View {
                             .offset(y: 4)
                     }
                     .scaleEffect(media.isPlaying ? 1 : 0.9)
-                    .animation(.spring(response: 0.45, dampingFraction: 0.68), value: media.isPlaying)
+                    .animation(.spring(response: 0.55, dampingFraction: 0.7), value: media.isPlaying)
                     .onTapGesture { media.openSourceApp() }
-
-                if let icon = media.sourceIcon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .frame(width: 30, height: 30)
-                        .shadow(color: .black.opacity(0.5), radius: 4)
-                        .offset(x: 8, y: 8)
-                        .transition(.scale.combined(with: .opacity))
-                }
             }
 
             VStack(alignment: .leading, spacing: 0) {
@@ -54,8 +45,8 @@ struct MusicPlayerView: View {
                     .lineLimit(1)
                     .id(media.trackID)
                     .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .move(edge: .top).combined(with: .opacity)))
+                        insertion: .offset(y: 14).combined(with: .blurFade),
+                        removal: .offset(y: -14).combined(with: .blurFade)))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     EqualizerView(isPlaying: media.isPlaying, color: media.accent, bars: 5)
