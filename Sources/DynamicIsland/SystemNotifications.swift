@@ -37,7 +37,7 @@ final class SystemNotificationsReader: ObservableObject {
 
     /// Сами себе уведомления не показываем, как и служебные системные.
     private static let ignored: Set<String> = [
-        "dev.aleksandrsenko.DynamicIsland", "com.apple.controlcenter", "_system_center_",
+        "dev.aleksandrsenko.dynamicisland", "com.apple.controlcenter", "_system_center_",
     ]
 
     init() {
@@ -193,7 +193,8 @@ final class SystemNotificationsReader: ObservableObject {
             let recID = sqlite3_column_int64(stmt, 0)
             guard let idPtr = sqlite3_column_text(stmt, 1) else { continue }
             let bundleID = String(cString: idPtr)
-            guard !Self.ignored.contains(bundleID) else { continue }
+            // В базе macOS 27 идентификаторы хранятся в нижнем регистре.
+            guard !Self.ignored.contains(bundleID.lowercased()) else { continue }
             let length = Int(sqlite3_column_bytes(stmt, 2))
             guard length > 0, let blob = sqlite3_column_blob(stmt, 2) else { continue }
             let data = Data(bytes: blob, count: length)
