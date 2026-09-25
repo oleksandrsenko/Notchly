@@ -38,26 +38,30 @@ struct IslandRootView: View {
 
     var body: some View {
         let shape = NotchShape(topRadius: model.topRadius, bottomRadius: model.bottomRadius)
-        VStack(spacing: 0) {
+        let size = model.shapeSize
+        // Содержимое лежит на неподвижном холсте размером с окно, по центру, и никогда не меняет раскладку.
+        // Анимируется только чёрная форма, которая его обрезает. Поэтому при сворачивании и при исчезновении
+        // HUD ничто не «уезжает» вбок: удаляемые виды SwiftUI привязывает к краю родителя, а родитель неподвижен.
+        ZStack(alignment: .top) {
+            // Тень рисуем только у фона. Если повесить её на весь остров,
+            // SwiftUI отбрасывает тень от каждой надписи, и текст выглядит размытым.
+            shape
+                .fill(Color.black)
+                .frame(width: size.width, height: size.height)
+                .shadow(color: .black.opacity(model.isExpanded || model.event != nil ? 0.5 : 0), radius: 16, y: 6)
             content
-                .frame(width: model.bodySize.width, height: model.bodySize.height, alignment: .top)
-                .padding(.horizontal, model.topRadius)
-                .clipShape(shape)
-                // Тень рисуем только у фона. Если повесить её на весь остров,
-                // SwiftUI отбрасывает тень от каждой надписи, и текст выглядит размытым.
-                .background {
-                    shape
-                        .fill(Color.black)
-                        .shadow(color: .black.opacity(model.isExpanded || model.droplet || model.event != nil ? 0.5 : 0), radius: 16, y: 6)
+                .frame(width: IslandMetrics.windowSize.width, height: IslandMetrics.windowSize.height, alignment: .top)
+                .mask(alignment: .top) {
+                    shape.frame(width: size.width, height: size.height)
                 }
-                .overlay {
-                    // Подсветка краёв при перетаскивании файла.
-                    shape.stroke(Color.white.opacity(model.isDropTargeted ? 0.35 : 0), lineWidth: 1.5)
-                }
-                .onDrop(of: [.fileURL], isTargeted: $model.isDropTargeted, perform: handleDrop)
-            Spacer(minLength: 0)
+            // Подсветка краёв при перетаскивании файла.
+            shape
+                .stroke(Color.white.opacity(model.isDropTargeted ? 0.35 : 0), lineWidth: 1.5)
+                .frame(width: size.width, height: size.height)
+                .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onDrop(of: [.fileURL], isTargeted: $model.isDropTargeted, perform: handleDrop)
         .animation(IslandMetrics.softSpring, value: media.showsLiveActivity)
         .animation(IslandMetrics.softSpring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
@@ -70,23 +74,28 @@ struct IslandRootView: View {
         }
     }
 
+    /// Быстрое исчезновение свёрнутых состояний: гаснут сразу и на месте, пока форма сжимается.
+    private static let compactTransition = AnyTransition.asymmetric(
+        insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.06)),
+        removal: .opacity.animation(.easeOut(duration: 0.12)))
+
     @ViewBuilder
     private var content: some View {
+        let body = model.bodySize
         if model.isExpanded {
             ExpandedIslandView(model: model, media: media)
-                // Фиксированный размер: пока остров стягивается в каплю, форма обрезает содержимое,
-                // а не сжимает его — ничего не перестраивается и не уезжает вбок.
+                // Фиксированный размер: при сворачивании форма обрезает содержимое, а не сжимает его.
                 .frame(width: IslandMetrics.expandedWidth,
                        height: model.notchSize.height + IslandMetrics.expandedContentHeight)
-                // Содержимое проявляется, когда форма уже почти раскрылась, и гаснет раньше, чем она сожмётся —
-                // без масштабирования, чтобы ничего не «выпрыгивало».
-                .transition(.asymmetric(
-                    insertion: .opacity.animation(.easeOut(duration: 0.28).delay(0.1)),
-                    removal: .opacity.animation(.easeIn(duration: 0.16))))
-        } else if model.droplet {
-            Color.clear
+                // Открытие: виджеты выходят снизу, когда шторка уже опускается.
+                // Закрытие: сначала всё гаснет, потом сворачивается форма.
+                .opacity(model.expandedContentVisible ? 1 : 0)
+                .offset(y: model.expandedContentVisible ? 0 : 12)
+                .allowsHitTesting(model.expandedContentVisible)
+                .transition(.identity)
         } else if let event = model.event, model.eventExpanded {
             EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
+                .frame(width: event.size.width, height: model.notchSize.height + event.size.height)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if case .notification(let item) = event { openApp(item.bundleID) }
@@ -94,22 +103,25 @@ struct IslandRootView: View {
                 }
                 .transition(.asymmetric(
                     insertion: .opacity.animation(.easeOut(duration: 0.3).delay(0.12)),
-                    removal: .opacity.animation(.easeIn(duration: 0.14))))
+                    removal: .opacity.animation(.easeOut(duration: 0.12))))
         } else if model.event != nil {
-            Color.clear
+            Color.clear.frame(width: 0, height: 0)
         } else if let hud = model.hud {
             HUDView(state: hud, notchWidth: model.notchSize.width)
-                .transition(.opacity)
+                .frame(width: body.width, height: body.height)
+                .transition(Self.compactTransition)
         } else if let group = model.clipPeek {
             ClipPeekView(group: group, icon: model.clipboard.icon(for: group.bundleID),
                          notchWidth: model.notchSize.width)
+                .frame(width: body.width, height: body.height)
                 .id(group.items.first?.id)
-                .transition(.opacity)
+                .transition(Self.compactTransition)
         } else if media.showsLiveActivity || (model.peek && media.hasTrack) {
             CompactMusicView(media: media, model: model)
-                .transition(.opacity.animation(.easeInOut(duration: 0.35)))
+                .frame(width: body.width, height: body.height)
+                .transition(Self.compactTransition)
         } else {
-            Color.clear
+            Color.clear.frame(width: 0, height: 0)
         }
     }
 

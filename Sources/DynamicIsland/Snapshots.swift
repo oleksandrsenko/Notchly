@@ -71,6 +71,7 @@ enum Snapshots {
             try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("11-tasks.png"))
         }
         model.isExpanded = true
+        model.expandedContentVisible = true
         let clipHost = NSHostingView(rootView: ClipboardView(clipboard: model.clipboard)
             .frame(width: 596, height: 130).padding(20).background(Color.black).preferredColorScheme(.dark))
         clipHost.frame = NSRect(x: 0, y: 0, width: 636, height: 170)
@@ -99,5 +100,6 @@ enum Snapshots {
         model.mixer.debugSet(apps: [], levels: [:], muted: [], access: .denied); shot("4-controls-denied")
         model.media.debugSet(title: "", artist: "", album: "", duration: 0, elapsed: 0, playing: false, artwork: nil, bundleID: nil)
         model.tab = .music; shot("5-empty")
+        model.tab = .home; shot("5-home-no-music")
     }
 }

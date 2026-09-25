@@ -96,11 +96,24 @@ final class AppAudioMixer: ObservableObject {
 
     // MARK: - Список приложений
 
+    /// Кому принадлежит аудиопроцесс (или никому). Поиск через LaunchServices дорогой,
+    /// а опрос идёт каждую секунду — поэтому запоминаем ответ, пока процесс жив.
+    private var owners: [pid_t: NSRunningApplication?] = [:]
+
+    private func owner(pid: pid_t, obj: AudioObjectID) -> NSRunningApplication? {
+        if let cached = owners[pid], cached?.isTerminated != true { return cached }
+        let app = Self.owningApp(pid: pid, obj: obj)
+        owners[pid] = .some(app)
+        return app
+    }
+
     private func refresh() {
         var byApp: [String: (app: NSRunningApplication, procs: [AudioObjectID], playing: Bool)] = [:]
+        var alive = Set<pid_t>()
         for obj in Self.processObjects() {
             let pid: pid_t = Self.read(obj, kAudioProcessPropertyPID, pid_t(0))
-            guard pid > 0, pid != ownPID, let app = Self.owningApp(pid: pid, obj: obj),
+            alive.insert(pid)
+            guard pid > 0, pid != ownPID, let app = owner(pid: pid, obj: obj),
                   let bundleID = app.bundleIdentifier, app.processIdentifier != ownPID else { continue }
             let playing = Self.read(obj, kAudioProcessPropertyIsRunningOutput, UInt32(0)) != 0
             var entry = byApp[bundleID] ?? (app, [], false)
@@ -108,6 +121,8 @@ final class AppAudioMixer: ObservableObject {
             entry.playing = entry.playing || playing
             byApp[bundleID] = entry
         }
+
+        owners = owners.filter { alive.contains($0.key) }
 
         let now = Date()
         var result: [AudioApp] = []

@@ -32,6 +32,8 @@ struct HomeView: View {
     private var clock: some View {
         TimelineView(.everyMinute) { ctx in
             VStack(alignment: .center, spacing: 2) {
+                // Без музыки время стоит по центру своей колонки, с музыкой — наверху, над мини-плеером.
+                if !media.hasTrack { Spacer(minLength: 0) }
                 // Без анимированной смены цифр: так время всегда остаётся идеально чётким.
                 Text(ctx.date, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
                     .font(.system(size: 44, weight: .semibold, design: .rounded))
@@ -40,11 +42,12 @@ struct HomeView: View {
                 Text(ctx.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "ru_RU"))).capitalizedFirst)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
-                Spacer(minLength: 6)
+                Spacer(minLength: media.hasTrack ? 6 : 0)
                 nowPlayingChip
             }
             .padding(.top, 0)
             .padding(.bottom, 2)
+            .animation(.spring(response: 0.45, dampingFraction: 0.9), value: media.hasTrack)
         }
     }
 
