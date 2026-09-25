@@ -36,8 +36,33 @@ enum IslandTab: String, CaseIterable, Identifiable {
 enum IslandEvent: Equatable {
     case charging(BatteryInfo)
     case device(DeviceBattery)
+    case notification(AppNotification)
 
     var isDevice: Bool { if case .device = self { return true } else { return false } }
+
+    var size: CGSize {
+        switch self {
+        case .charging: return IslandMetrics.eventSize
+        case .device: return IslandMetrics.deviceSheetSize
+        case .notification: return IslandMetrics.notificationSize
+        }
+    }
+
+    var bottomRadius: CGFloat {
+        switch self {
+        case .charging: return 32
+        case .device: return 42
+        case .notification: return 28
+        }
+    }
+
+    var duration: TimeInterval {
+        switch self {
+        case .charging: return 4.5
+        case .device: return 8
+        case .notification: return 6
+        }
+    }
 }
 
 struct HUDState: Equatable {
@@ -56,10 +81,13 @@ enum IslandMetrics {
     static let peekExtraHeight: CGFloat = 34
     static let eventSize = CGSize(width: 440, height: 118)
     static let deviceSheetSize = CGSize(width: 380, height: 236)
+    static let notificationSize = CGSize(width: 430, height: 76)
     /// Запас окна вокруг острова, чтобы тень и пружинная анимация не обрезались.
     static let windowSize = CGSize(width: 760, height: 320)
-    static let spring = Animation.spring(response: 0.42, dampingFraction: 0.78)
-    static let softSpring = Animation.spring(response: 0.5, dampingFraction: 0.86)
+    static let spring = Animation.spring(response: 0.46, dampingFraction: 0.84)
+    static let softSpring = Animation.spring(response: 0.55, dampingFraction: 0.9)
+    /// Сворачивание: без отскока, неспешно, но и не затянуто.
+    static let collapse = Animation.spring(response: 0.6, dampingFraction: 1)
 }
 
 final class IslandModel: ObservableObject {
@@ -90,7 +118,9 @@ final class IslandModel: ObservableObject {
     let mixer = AppAudioMixer()
     let shelf = ShelfStore()
     let notes = NotesStore()
-    let clipboard = ClipboardMonitor()
+    let clipboard: ClipboardMonitor
+    let tasks: TasksStore
+    let gemini = GeminiAssistant()
     let batteries = DeviceBatteryMonitor()
     let keys = MediaKeyInterceptor()
     let weather = WeatherService()
@@ -104,13 +134,17 @@ final class IslandModel: ObservableObject {
     private var eventTask: DispatchWorkItem?
     private var bag = Set<AnyCancellable>()
 
-    init() {
+    /// persistent = false — для снапшотов: ничего не читаем и не пишем на диск.
+    init(persistent: Bool = true) {
+        clipboard = ClipboardMonitor(persistent: persistent)
+        tasks = TasksStore(persistent: persistent)
         tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .home
 
         keys.handler = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
         clipboard.onCopy = { [weak self] group in self?.showClipPeek(group) }
         batteries.onChargerConnected = { [weak self] info in self?.showEvent(.charging(info)) }
         batteries.onAudioDeviceConnected = { [weak self] device in self?.showEvent(.device(device)) }
+        systemNotifications.onNew = { [weak self] item in self?.showEvent(.notification(item)) }
 
         volume.onExternalChange = { [weak self] value, muted in
             self?.showHUD(HUDState(kind: .volume, value: value, muted: muted))
@@ -118,7 +152,7 @@ final class IslandModel: ObservableObject {
         brightness.onExternalChange = { [weak self] value in
             self?.showHUD(HUDState(kind: .brightness, value: value))
         }
-        media.onTrackChange = { [weak self] in self?.showPeek() }
+        media.onTrackChange = { [weak self] in self?.trackChanged() }
 
         // Пересчитываем форму острова, когда меняется состояние плеера.
         media.$showsLiveActivity
@@ -133,7 +167,7 @@ final class IslandModel: ObservableObject {
 
     var bottomRadius: CGFloat {
         if isExpanded { return 34 }
-        if let event { return event.isDevice ? 42 : 32 }
+        if let event { return event.bottomRadius }
         if peek && media.hasTrack { return 20 }
         return hasPhysicalNotch ? 11 : 14
     }
@@ -145,7 +179,7 @@ final class IslandModel: ObservableObject {
             return CGSize(width: IslandMetrics.expandedWidth, height: n.height + IslandMetrics.expandedContentHeight)
         }
         if let event {
-            let size = event.isDevice ? IslandMetrics.deviceSheetSize : IslandMetrics.eventSize
+            let size = event.size
             return CGSize(width: size.width, height: n.height + size.height)
         }
         if hud != nil || clipPeek != nil {
@@ -173,13 +207,18 @@ final class IslandModel: ObservableObject {
     }
 
     func expand(to tab: IslandTab? = nil) {
-        if let tab { self.tab = tab }
+        if let tab {
+            self.tab = tab
+        } else if !isExpanded {
+            // Каждое открытие начинается с главной.
+            self.tab = .home
+        }
         guard !isExpanded else { return }
         hud = nil
         peek = false
         clipPeek = nil
         event = nil
-        if tab == .home {
+        if self.tab == .home {
             batteries.refresh()
             weather.refresh()
         }
@@ -190,7 +229,7 @@ final class IslandModel: ObservableObject {
     func collapse() {
         guard isExpanded else { return }
         vault.lock()
-        withAnimation(IslandMetrics.softSpring) { isExpanded = false }
+        withAnimation(IslandMetrics.collapse) { isExpanded = false }
     }
 
     func showEvent(_ event: IslandEvent) {
@@ -204,7 +243,7 @@ final class IslandModel: ObservableObject {
             clipPeek = nil
             self.event = event
         }
-        scheduleEventDismiss(after: event.isDevice ? 8 : 4.5)
+        scheduleEventDismiss(after: event.duration)
     }
 
     private func scheduleEventDismiss(after delay: TimeInterval) {
@@ -269,10 +308,26 @@ final class IslandModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: task)
     }
 
+    private var peekedID = ""
+    private var trackChangeWork: DispatchWorkItem?
+
+    /// Плееры присылают название, исполнителя и альбом не всегда одним сообщением.
+    /// Ждём, пока данные устоятся, и показываем шторку один раз на трек.
+    private func trackChanged() {
+        trackChangeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.media.hasTrack, self.media.peekID != self.peekedID else { return }
+            self.peekedID = self.media.peekID
+            self.showPeek()
+        }
+        trackChangeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+    }
+
     func showPeek() {
         guard !isExpanded, hud == nil, event == nil, media.hasTrack else { return }
         peekTask?.cancel()
-        withAnimation(IslandMetrics.spring) { peek = true }
+        if !peek { withAnimation(IslandMetrics.softSpring) { peek = true } }
         let task = DispatchWorkItem { [weak self] in
             withAnimation(IslandMetrics.softSpring) { self?.peek = false }
         }

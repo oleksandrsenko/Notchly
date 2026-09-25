@@ -2,7 +2,7 @@ import AppKit
 import ServiceManagement
 
 @main
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: NotchWindowController?
     private var statusItem: NSStatusItem?
 
@@ -49,6 +49,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
 
+        let retention = NSMenuItem(title: "Хранить буфер обмена", action: nil, keyEquivalent: "")
+        let retentionMenu = NSMenu()
+        for days in ClipboardMonitor.retentionOptions {
+            let title = days == 0 ? "Бесконечно" : days == 1 ? "1 день" : "\(days) дней"
+            let item = NSMenuItem(title: title, action: #selector(setClipboardRetention(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = days
+            retentionMenu.addItem(item)
+        }
+        retentionMenu.delegate = self
+        retention.submenu = retentionMenu
+        menu.addItem(retention)
+
         let clear = NSMenuItem(title: "Очистить файлы", action: #selector(clearShelf), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
@@ -70,6 +83,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("Launch at login: \(error)")
         }
         sender.state = SMAppService.mainApp.status == .enabled ? .on : .off
+    }
+
+    @objc private func setClipboardRetention(_ sender: NSMenuItem) {
+        controller?.model.clipboard.retentionDays = sender.tag
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let current = controller?.model.clipboard.retentionDays ?? 7
+        for item in menu.items { item.state = item.tag == current ? .on : .off }
     }
 
     @objc private func clearShelf() {

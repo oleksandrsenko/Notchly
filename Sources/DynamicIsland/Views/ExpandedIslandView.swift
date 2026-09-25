@@ -4,8 +4,6 @@ import IOKit.ps
 struct ExpandedIslandView: View {
     @ObservedObject var model: IslandModel
     @ObservedObject var media: MediaController
-    var ns: Namespace.ID
-
     @Namespace private var tabNS
     @ViewState private var tabDirection: Edge = .trailing
 
@@ -14,24 +12,23 @@ struct ExpandedIslandView: View {
             header
                 .frame(height: model.notchSize.height)
                 .staggered(0)
+            // Страницы не обрезаем отдельным контейнером — иначе при смене вкладки
+            // содержимое срезается по линии отступа. Края обрезает сама форма острова.
             ZStack {
                 page(for: model.tab)
+                    .padding(.horizontal, 22)
+                    .padding(.top, 8)
+                    .padding(.bottom, 18)
                     .id(model.tab)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: tabDirection).combined(with: .opacity),
-                        removal: .move(edge: tabDirection == .trailing ? .leading : .trailing).combined(with: .opacity)))
+                    .transition(.pageSlide(tabDirection))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
             .staggered(1)
-            .padding(.horizontal, 22)
-            .padding(.top, 8)
-            .padding(.bottom, 18)
         }
         .background(alignment: .bottom) {
             // Мягкое свечение цвета обложки на вкладке музыки.
             if model.tab == .music && media.hasTrack {
-                RadialGradient(colors: [media.accent.opacity(0.22), .clear],
+                RadialGradient(colors: [media.accent.opacity(0.14), .clear],
                                center: .bottomLeading, startRadius: 10, endRadius: 360)
                     .allowsHitTesting(false)
                     .transition(.opacity)
@@ -69,19 +66,39 @@ struct ExpandedIslandView: View {
         let from = all.firstIndex(of: model.tab) ?? 0
         let to = all.firstIndex(of: tab) ?? 0
         tabDirection = to >= from ? .trailing : .leading
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { model.tab = tab }
+        withAnimation(.spring(response: 0.46, dampingFraction: 0.9)) { model.tab = tab }
     }
 
     @ViewBuilder
     private func page(for tab: IslandTab) -> some View {
         switch tab {
         case .home: HomeView(model: model, media: media, batteries: model.batteries) { select(.music) }
-        case .music: MusicPlayerView(media: media, ns: ns)
+        case .music: MusicPlayerView(media: media)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
-        case .notes: NotesView(store: model.notes, clipboard: model.clipboard, vault: model.vault)
+        case .notes: NotesView(store: model.notes, clipboard: model.clipboard, vault: model.vault,
+                                     tasks: model.tasks, gemini: model.gemini)
         case .notifications: NotificationsView(gmail: model.gmail, system: model.systemNotifications)
         case .controls: ControlsView(volume: model.volume, brightness: model.brightness, mixer: model.mixer)
         }
+    }
+}
+
+private struct PageSlide: ViewModifier {
+    var offset: CGFloat
+    var opacity: Double
+    func body(content: Content) -> some View {
+        content.offset(x: offset).opacity(opacity)
+    }
+}
+
+extension AnyTransition {
+    /// Короткий сдвиг с растворением: новая страница въезжает на 40 pt, старая уходит в другую сторону.
+    static func pageSlide(_ edge: Edge) -> AnyTransition {
+        let shift: CGFloat = edge == .trailing ? 40 : -40
+        return .asymmetric(
+            insertion: .modifier(active: PageSlide(offset: shift, opacity: 0), identity: PageSlide(offset: 0, opacity: 1)),
+            removal: .modifier(active: PageSlide(offset: -shift, opacity: 0), identity: PageSlide(offset: 0, opacity: 1))
+                .animation(.easeOut(duration: 0.18)))
     }
 }
 

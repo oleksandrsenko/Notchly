@@ -126,3 +126,71 @@ final class NotesStore: ObservableObject {
 
     func persist() { save(notes, to: "notes.json") }
 }
+
+// MARK: - Задачи
+
+struct TaskItem: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var text: String
+    var done = false
+    /// Время в формате «ЧЧ:ММ», если задача привязана ко времени.
+    var time: String?
+    var createdAt = Date()
+}
+
+/// Компактный список дел. Сохраняется сразу после каждого изменения.
+final class TasksStore: ObservableObject {
+    @Published private(set) var items: [TaskItem] = []
+    private let persistent: Bool
+
+    init(persistent: Bool = true) {
+        self.persistent = persistent
+        if persistent { items = load([TaskItem].self, from: "tasks.json") ?? [] }
+    }
+
+    /// Невыполненные сверху (по времени), выполненные внизу.
+    var sorted: [TaskItem] {
+        items.sorted { a, b in
+            if a.done != b.done { return !a.done }
+            switch (a.time, b.time) {
+            case let (x?, y?) where x != y: return x < y
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return a.createdAt < b.createdAt
+            }
+        }
+    }
+
+    func add(_ text: String, time: String? = nil) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) {
+            items.append(TaskItem(text: trimmed, time: time))
+        }
+        persist()
+    }
+
+    func toggle(_ id: UUID) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items[i].done.toggle() }
+        persist()
+    }
+
+    func remove(_ id: UUID) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { items.removeAll { $0.id == id } }
+        persist()
+    }
+
+    func clearDone() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { items.removeAll(where: \.done) }
+        persist()
+    }
+
+    /// Для снапшотов.
+    func debugSet(_ items: [TaskItem]) { self.items = items }
+
+    private func persist() {
+        guard persistent else { return }
+        save(items, to: "tasks.json")
+    }
+}

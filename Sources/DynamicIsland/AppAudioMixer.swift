@@ -142,9 +142,15 @@ final class AppAudioMixer: ObservableObject {
             return
         }
         guard Self.isSupported else { return }
-        if let tap = taps[app.bundleID], tap.processes == app.processes, tap.isRunning {
+        if let tap = taps[app.bundleID], tap.isRunning {
             tap.gain.target = gain
-            return
+            // Браузеры постоянно заводят и закрывают хелперы. Пересоздавать tap из-за этого нельзя —
+            // будет слышен обрыв, поэтому меняем список процессов у работающего tap.
+            if tap.processes != app.processes && !tap.update(processes: app.processes) {
+                taps.removeValue(forKey: app.bundleID)?.stop()
+            } else {
+                return
+            }
         }
         switch AudioCaptureAccess.status {
         case .granted:
@@ -259,7 +265,8 @@ final class GainBox: @unchecked Sendable {
 }
 
 private final class ProcessTap {
-    let processes: [AudioObjectID]
+    private(set) var processes: [AudioObjectID]
+    private var description: AnyObject?
     let gain: GainBox
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
@@ -276,6 +283,7 @@ private final class ProcessTap {
         description.muteBehavior = .muted
         description.isPrivate = true
         description.isExclusive = false
+        self.description = description
         guard AudioHardwareCreateProcessTap(description, &tapID) == noErr, tapID != kAudioObjectUnknown else {
             NSLog("Mixer: не удалось создать tap")
             return nil
@@ -307,6 +315,25 @@ private final class ProcessTap {
             stop(); return nil
         }
         isRunning = true
+    }
+
+    /// Меняет состав процессов без остановки звука. false — если система не приняла изменение.
+    func update(processes: [AudioObjectID]) -> Bool {
+        guard #available(macOS 14.2, *), let description = description as? CATapDescription,
+              tapID != kAudioObjectUnknown else { return false }
+        description.processes = processes
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioTapPropertyDescription,
+                                              mScope: kAudioObjectPropertyScopeGlobal,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var ref: Unmanaged<CATapDescription> = .passUnretained(description)
+        let status = AudioObjectSetPropertyData(tapID, &addr, 0, nil,
+                                                UInt32(MemoryLayout<Unmanaged<CATapDescription>>.size), &ref)
+        guard status == noErr else {
+            NSLog("Mixer: не удалось обновить процессы tap (\(status))")
+            return false
+        }
+        self.processes = processes
+        return true
     }
 
     func stop() {

@@ -35,7 +35,6 @@ struct NotchShape: Shape {
 struct IslandRootView: View {
     @ObservedObject var model: IslandModel
     @ObservedObject var media: MediaController
-    @Namespace private var ns
 
     var body: some View {
         let shape = NotchShape(topRadius: model.topRadius, bottomRadius: model.bottomRadius)
@@ -59,9 +58,9 @@ struct IslandRootView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(IslandMetrics.spring, value: model.isExpanded)
-        .animation(IslandMetrics.spring, value: media.showsLiveActivity)
-        .animation(IslandMetrics.spring, value: model.peek)
+        .animation(model.isExpanded ? IslandMetrics.spring : IslandMetrics.collapse, value: model.isExpanded)
+        .animation(IslandMetrics.softSpring, value: media.showsLiveActivity)
+        .animation(IslandMetrics.softSpring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
         .animation(IslandMetrics.spring, value: model.clipPeek)
         .animation(.spring(response: 0.5, dampingFraction: 0.86), value: model.event)
@@ -74,14 +73,19 @@ struct IslandRootView: View {
     @ViewBuilder
     private var content: some View {
         if model.isExpanded {
-            ExpandedIslandView(model: model, media: media, ns: ns)
+            ExpandedIslandView(model: model, media: media)
+                // Содержимое проявляется, когда форма уже почти раскрылась, и гаснет раньше, чем она сожмётся —
+                // без масштабирования, чтобы ничего не «выпрыгивало».
                 .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .top)).animation(IslandMetrics.spring.delay(0.05)),
-                    removal: .opacity.animation(.easeOut(duration: 0.12))))
+                    insertion: .opacity.animation(.easeOut(duration: 0.28).delay(0.1)),
+                    removal: .opacity.animation(.easeIn(duration: 0.16))))
         } else if let event = model.event {
             EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
                 .contentShape(Rectangle())
-                .onTapGesture { if !event.isDevice { model.dismissEvent() } }
+                .onTapGesture {
+                    if case .notification(let item) = event { openApp(item.bundleID) }
+                    if !event.isDevice { model.dismissEvent() }
+                }
                 .transition(.asymmetric(
                     insertion: .opacity.animation(.smooth(duration: 0.3).delay(0.1)),
                     removal: .opacity.animation(.easeOut(duration: 0.15))))
@@ -94,11 +98,16 @@ struct IslandRootView: View {
                 .id(group.items.first?.id)
                 .transition(.opacity)
         } else if media.showsLiveActivity || (model.peek && media.hasTrack) {
-            CompactMusicView(media: media, model: model, ns: ns)
-                .transition(.opacity)
+            CompactMusicView(media: media, model: model)
+                .transition(.opacity.animation(.easeInOut(duration: 0.35)))
         } else {
             Color.clear
         }
+    }
+
+    private func openApp(_ bundleID: String) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: .init())
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {

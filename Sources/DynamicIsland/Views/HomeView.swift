@@ -20,7 +20,8 @@ struct HomeView: View {
 
             HStack(spacing: 10) {
                 WeatherCard(service: model.weather).staggered(1)
-                BatteryCarousel(mac: batteries.mac, headphones: batteries.headphones).staggered(2)
+                BatteryCarousel(mac: batteries.mac, headphones: batteries.headphones,
+                                accessories: batteries.accessories, phone: batteries.phone).staggered(2)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -161,25 +162,40 @@ private extension String {
 }
 
 
-/// Одна карточка заряда, которую можно листать: MacBook ↔ наушники.
+/// Одна карточка заряда, которую можно листать: MacBook ↔ наушники ↔ мышь и другие устройства ↔ iPhone.
 private struct BatteryCarousel: View {
     var mac: BatteryInfo?
     var headphones: DeviceBattery?
+    var accessories: [DeviceBattery]
+    var phone: PhoneBattery?
     @ViewState private var page: Int? = 0
 
-    private var pageCount: Int { headphones == nil ? 1 : 2 }
+    private enum Page { case mac, headphones(DeviceBattery), accessory(DeviceBattery), phone(PhoneBattery) }
+
+    private var pages: [Page] {
+        var result: [Page] = [.mac]
+        if let headphones { result.append(.headphones(headphones)) }
+        result += accessories.map(Page.accessory)
+        if let phone { result.append(.phone(phone)) }
+        return result
+    }
 
     var body: some View {
+        let pages = pages
         VStack(spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 0) {
-                    macPage
-                        .containerRelativeFrame(.horizontal)
-                        .id(0)
-                    if let headphones {
-                        headphonesPage(headphones)
+                    ForEach(pages.indices, id: \.self) { i in
+                        pageView(pages[i])
                             .containerRelativeFrame(.horizontal)
-                            .id(1)
+                            // Страница при листании мягко гаснет и чуть уменьшается — без рывков.
+                            .scrollTransition(.interactive, axis: .horizontal) { content, phase in
+                                content
+                                    .opacity(1 - abs(phase.value) * 0.8)
+                                    .scaleEffect(1 - abs(phase.value) * 0.06)
+                                    .offset(x: phase.value * -18)
+                            }
+                            .id(i)
                     }
                 }
                 .scrollTargetLayout()
@@ -187,16 +203,17 @@ private struct BatteryCarousel: View {
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $page)
 
-            if pageCount > 1 {
+            if pages.count > 1 {
                 HStack(spacing: 5) {
-                    ForEach(0..<pageCount, id: \.self) { i in
+                    ForEach(0..<pages.count, id: \.self) { i in
                         Capsule()
                             .fill(.white.opacity((page ?? 0) == i ? 0.9 : 0.25))
                             .frame(width: (page ?? 0) == i ? 14 : 5, height: 5)
-                            .onTapGesture { withAnimation(.smooth(duration: 0.35)) { page = i } }
+                            .contentShape(Rectangle().inset(by: -4))
+                            .onTapGesture { withAnimation(.spring(response: 0.5, dampingFraction: 0.9)) { page = i } }
                     }
                 }
-                .animation(.smooth(duration: 0.25), value: page)
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: page)
             }
         }
         .padding(.vertical, 10)
@@ -204,6 +221,16 @@ private struct BatteryCarousel: View {
         .frame(height: 104)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.06)))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func pageView(_ page: Page) -> some View {
+        switch page {
+        case .mac: macPage
+        case .headphones(let device): headphonesPage(device)
+        case .accessory(let device): accessoryPage(device)
+        case .phone(let phone): phonePage(phone)
+        }
     }
 
     private var macPage: some View {
@@ -221,6 +248,38 @@ private struct BatteryCarousel: View {
             }
             .frame(width: 60)
             info(title: "MacBook", percent: mac?.percent, note: mac?.charging == true ? "Заряжается" : nil)
+        }
+        .padding(.horizontal, 14)
+    }
+
+    private func accessoryPage(_ device: DeviceBattery) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: device.symbol)
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.75)], startPoint: .top, endPoint: .bottom))
+                .frame(width: 60)
+            info(title: device.name, percent: device.primaryLevel?.percent, note: nil)
+        }
+        .padding(.horizontal, 14)
+    }
+
+    private func phonePage(_ phone: PhoneBattery) -> some View {
+        let minutes = Int(Date().timeIntervalSince(phone.updated) / 60)
+        let age = minutes < 1 ? "только что" : minutes < 60 ? "\(minutes) мин назад" : "\(minutes / 60) ч назад"
+        return HStack(spacing: 12) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "iphone")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.75)], startPoint: .top, endPoint: .bottom))
+                if phone.charging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.green)
+                        .offset(x: 8, y: -4)
+                }
+            }
+            .frame(width: 60)
+            info(title: "iPhone", percent: phone.percent, note: phone.charging ? "Заряжается · \(age)" : age)
         }
         .padding(.horizontal, 14)
     }

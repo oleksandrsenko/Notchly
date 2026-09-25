@@ -6,7 +6,7 @@ enum Snapshots {
     @MainActor
     static func render(to dir: URL) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let model = IslandModel()
+        let model = IslandModel(persistent: false)
         model.notchSize = CGSize(width: 185, height: 32)
 
         let art = NSImage(size: NSSize(width: 300, height: 300), flipped: false) { rect in
@@ -50,7 +50,26 @@ enum Snapshots {
             .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 40)])); shot("8-airpods")
         model.event = .device(DeviceBattery(name: "AirPods Max", symbol: "airpodsmax", levels: [
             .init(label: "", symbol: "", percent: 64)])); shot("9-max")
+        model.event = .notification(AppNotification(id: "1", bundleID: "ru.keepcoder.Telegram", title: "Мама",
+                                                    subtitle: "", body: "Ты сегодня приедешь на ужин? Я приготовлю твой любимый пирог 🥧",
+                                                    date: Date())); shot("10-notification")
         model.event = nil
+        model.batteries.debugSet(devices: [
+            DeviceBattery(name: "Magic Mouse", symbol: "magicmouse.fill", levels: [.init(label: "", symbol: "", percent: 57)])],
+            phone: PhoneBattery(percent: 76, charging: true, updated: Date().addingTimeInterval(-600)))
+        model.tasks.debugSet([
+            TaskItem(text: "Спортзал", time: "17:00"),
+            TaskItem(text: "Созвон с командой", time: "22:00"),
+            TaskItem(text: "Купить продукты"),
+            TaskItem(text: "Ответить на письма", done: true)])
+        let tasksHost = NSHostingView(rootView: TasksView(store: model.tasks, gemini: model.gemini)
+            .frame(width: 596, height: 118).padding(20).background(Color.black).preferredColorScheme(.dark))
+        tasksHost.frame = NSRect(x: 0, y: 0, width: 636, height: 158)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        if let rep = tasksHost.bitmapImageRepForCachingDisplay(in: tasksHost.bounds) {
+            tasksHost.cacheDisplay(in: tasksHost.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("11-tasks.png"))
+        }
         model.isExpanded = true
         let clipHost = NSHostingView(rootView: ClipboardView(clipboard: model.clipboard)
             .frame(width: 596, height: 130).padding(20).background(Color.black).preferredColorScheme(.dark))
@@ -69,6 +88,11 @@ enum Snapshots {
             AudioApp(bundleID: "ru.keepcoder.Telegram", name: "Telegram", icon: icon("/Applications/Telegram.app"),
                      processes: [], isPlaying: false)],
             levels: ["com.apple.Safari": 0.35], muted: ["ru.keepcoder.Telegram"], access: .granted)
+        model.systemNotifications.debugSet([
+            AppNotification(id: "a", bundleID: "ru.keepcoder.Telegram", title: "Мама", subtitle: "",
+                            body: "Ты сегодня приедешь?", date: Date()),
+            AppNotification(id: "b", bundleID: "com.apple.Passwords", title: "Пароли", subtitle: "",
+                            body: "Обнаружен скомпрометированный пароль", date: Date().addingTimeInterval(-3600))])
         for tab in IslandTab.allCases { model.tab = tab; shot("4-\(tab.rawValue)") }
         model.tab = .controls
         model.mixer.debugSet(apps: [], levels: [:], muted: [], access: .granted); shot("4-controls-empty")

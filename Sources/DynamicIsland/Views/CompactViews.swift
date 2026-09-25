@@ -5,7 +5,6 @@ import SwiftUI
 struct CompactMusicView: View {
     @ObservedObject var media: MediaController
     @ObservedObject var model: IslandModel
-    var ns: Namespace.ID
 
     var body: some View {
         let h = model.notchSize.height
@@ -13,7 +12,6 @@ struct CompactMusicView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 ArtworkView(image: media.artwork, accent: media.accent, cornerRadius: 6)
-                    .matchedGeometryEffect(id: "artwork", in: ns)
                     .frame(width: art, height: art)
                 Spacer(minLength: model.notchSize.width)
                 EqualizerView(isPlaying: media.isPlaying, color: media.accent)
@@ -37,10 +35,10 @@ struct CompactMusicView: View {
                 .lineLimit(1)
                 .padding(.horizontal, 18)
                 .frame(height: IslandMetrics.peekExtraHeight - 6)
-                .id(media.trackID)
+                .id(media.peekID)
                 .transition(.asymmetric(
-                    insertion: .move(edge: .top).combined(with: .opacity),
-                    removal: .opacity))
+                    insertion: .offset(y: -6).combined(with: .opacity).animation(.easeOut(duration: 0.35).delay(0.08)),
+                    removal: .opacity.animation(.easeIn(duration: 0.18))))
             }
         }
     }

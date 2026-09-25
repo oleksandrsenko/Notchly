@@ -2,13 +2,17 @@ import SwiftUI
 
 struct NotesView: View {
     enum Mode: String, CaseIterable {
-        case notes = "Заметки", clipboard = "Буфер обмена", vault = "API-ключи"
-        static let segments: [Mode] = [.notes, .clipboard]
+        case notes = "Заметки", tasks = "Задачи", clipboard = "Буфер обмена", vault = "API-ключи"
+        static let segments: [Mode] = [.notes, .tasks, .clipboard]
+        var order: Int { Mode.allCases.firstIndex(of: self) ?? 0 }
     }
 
     @ObservedObject var store: NotesStore
     @ObservedObject var clipboard: ClipboardMonitor
     @ObservedObject var vault: KeyVault
+    @ObservedObject var tasks: TasksStore
+    var gemini: GeminiAssistant
+    @ViewState private var direction: Edge = .trailing
     @FocusState private var editorFocused: Bool
     @ViewState private var mode: Mode = .notes
     @Namespace private var segmentNS
@@ -18,9 +22,7 @@ struct NotesView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 2) {
                     ForEach(Mode.segments, id: \.self) { item in
-                        Button {
-                            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { mode = item }
-                        } label: {
+                        Button { switchTo(item) } label: {
                             Text(item.rawValue)
                                 .font(.system(size: 11.5, weight: .semibold))
                                 .foregroundStyle(mode == item ? .black : .white.opacity(0.6))
@@ -40,12 +42,8 @@ struct NotesView: View {
                 .background(Capsule().fill(.white.opacity(0.08)))
 
                 // Кнопка ключей «выезжает» рядом, когда открыт буфер обмена.
-                if mode != .notes {
-                    Button {
-                        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
-                            mode = mode == .vault ? .clipboard : .vault
-                        }
-                    } label: {
+                if mode == .clipboard || mode == .vault {
+                    Button { switchTo(mode == .vault ? .clipboard : .vault) } label: {
                         Label("API-ключи", systemImage: vault.isUnlocked ? "lock.open.fill" : "lock.fill")
                             .font(.system(size: 11.5, weight: .semibold))
                             .foregroundStyle(mode == .vault ? .black : .yellow.opacity(0.9))
@@ -69,6 +67,12 @@ struct NotesView: View {
                     }
                     .foregroundStyle(.white.opacity(0.8))
                     .transition(.blurFade)
+                } else if mode == .tasks && tasks.items.contains(where: \.done) {
+                    Button("Убрать выполненные") { tasks.clearDone() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .transition(.opacity)
                 } else if mode == .clipboard && !clipboard.groups.isEmpty {
                     Button("Очистить") { clipboard.clear() }
                         .buttonStyle(.plain)
@@ -79,27 +83,25 @@ struct NotesView: View {
             }
 
             ZStack {
-                if mode == .notes {
-                    notes
-                        .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .leading))
-                            .combined(with: .opacity))
-                } else if mode == .clipboard {
-                    ClipboardView(clipboard: clipboard)
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing))
-                            .combined(with: .opacity))
-                } else {
-                    KeyVaultView(vault: vault)
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing))
-                            .combined(with: .opacity))
+                switch mode {
+                case .notes: notes.transition(.pageSlide(direction))
+                case .tasks: TasksView(store: tasks, gemini: gemini).transition(.pageSlide(direction))
+                case .clipboard: ClipboardView(clipboard: clipboard).transition(.pageSlide(direction))
+                case .vault: KeyVaultView(vault: vault).transition(.pageSlide(direction))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
         }
         .onDisappear {
             store.persist()
             vault.lock()
         }
+    }
+
+    private func switchTo(_ item: Mode) {
+        guard item != mode else { return }
+        direction = item.order > mode.order ? .trailing : .leading
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) { mode = item }
     }
 
     private var notes: some View {
@@ -131,15 +133,17 @@ struct NotesView: View {
                         .focused($editorFocused)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .id(id)
-                        .transition(.blurFade)
                     if store.selected?.text.isEmpty ?? true {
                         Text("Начните печатать…")
                             .font(.system(size: 13))
                             .foregroundStyle(.white.opacity(0.3))
                             .padding(.horizontal, 13)
                             .padding(.vertical, 8)
+                            .fixedSize()
                             .allowsHitTesting(false)
+                            .transaction { $0.animation = nil }
                     }
                 }
             }

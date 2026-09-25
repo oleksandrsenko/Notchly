@@ -192,6 +192,27 @@ struct CapsuleSlider: View {
     }
 }
 
+/// Маленький крестик «удалить»: едва заметный, ярче при наведении.
+struct DismissButton: View {
+    var help: String
+    var action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(hovering ? 0.9 : 0.35))
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(.white.opacity(hovering ? 0.12 : 0.04)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableStyle())
+        .help(help)
+        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+    }
+}
+
 func formatTime(_ seconds: Double) -> String {
     guard seconds.isFinite, seconds >= 0 else { return "0:00" }
     let s = Int(seconds)

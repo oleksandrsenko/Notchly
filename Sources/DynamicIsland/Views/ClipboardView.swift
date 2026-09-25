@@ -21,10 +21,15 @@ struct ClipboardView: View {
                 VStack(spacing: 4) {
                     ForEach(clipboard.groups) { group in
                         VStack(spacing: 2) {
-                            GroupRow(group: group, icon: clipboard.icon(for: group.bundleID),
-                                     isExpanded: expanded == group.id) {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    expanded = expanded == group.id ? nil : group.id
+                            HStack(spacing: 4) {
+                                GroupRow(group: group, icon: clipboard.icon(for: group.bundleID),
+                                         isExpanded: expanded == group.id) {
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                                        expanded = expanded == group.id ? nil : group.id
+                                    }
+                                }
+                                DismissButton(help: "Удалить всё из \(group.appName)") {
+                                    clipboard.remove(group: group)
                                 }
                             }
                             if expanded == group.id {

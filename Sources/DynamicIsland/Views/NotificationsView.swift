@@ -25,9 +25,25 @@ struct NotificationsView: View {
                 if system.needsFullDiskAccess {
                     accessRow
                 }
+                if !appGroups.isEmpty {
+                    HStack {
+                        Text("Приложения")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.4))
+                        Spacer()
+                        Button("Очистить всё") {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) { system.dismissAll() }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 4)
+                }
                 ForEach(appGroups) { group in
                     appSection(group)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(.opacity.combined(with: .offset(y: -6)))
                 }
                 if !system.needsFullDiskAccess && appGroups.isEmpty && gmail.mails.isEmpty && gmail.isConnected {
                     Text("Новых уведомлений нет")
@@ -95,14 +111,24 @@ struct NotificationsView: View {
 
     private func appSection(_ group: AppGroup) -> some View {
         VStack(spacing: 2) {
-            GroupHeader(icon: .app(group.bundleID), title: appName(group.bundleID),
-                        subtitle: group.items.first.map { $0.title } ?? "",
-                        count: group.items.count, latest: group.items.first?.date,
-                        isExpanded: expanded == group.id) { toggle(group.id) }
+            HStack(spacing: 4) {
+                GroupHeader(icon: .app(group.bundleID), title: appName(group.bundleID),
+                            subtitle: group.items.first.map { $0.title } ?? "",
+                            count: group.items.count, latest: group.items.first?.date,
+                            isExpanded: expanded == group.id) { toggle(group.id) }
+                DismissButton(help: "Удалить все уведомления \(appName(group.bundleID))") {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+                        system.dismissAll(bundleID: group.bundleID)
+                    }
+                }
+            }
             if expanded == group.id {
                 VStack(spacing: 2) {
                     ForEach(group.items) { item in
-                        AppNotificationRow(item: item) { openApp(group.bundleID) }
+                        AppNotificationRow(item: item) { openApp(group.bundleID) } onDismiss: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { system.dismiss(item) }
+                        }
+                        .transition(.opacity)
                     }
                 }
                 .padding(.leading, 30)
@@ -277,6 +303,7 @@ private struct MailRow: View {
 private struct AppNotificationRow: View {
     var item: AppNotification
     var action: () -> Void
+    var onDismiss: () -> Void
     @ViewState private var hovering = false
 
     var body: some View {
@@ -295,10 +322,25 @@ private struct AppNotificationRow: View {
                     }
                 }
                 Spacer(minLength: 6)
-                Text(shortTimestamp(item.date))
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.4))
+                ZStack(alignment: .trailing) {
+                    Text(shortTimestamp(item.date))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.4))
+                        .opacity(hovering ? 0 : 1)
+                    if hovering {
+                        Button(action: onDismiss) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.6))
+                                .frame(width: 18, height: 18)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Удалить уведомление")
+                        .transition(.opacity)
+                    }
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

@@ -16,6 +16,15 @@ final class SystemNotificationsReader: ObservableObject {
     @Published private(set) var notifications: [AppNotification] = []
     @Published private(set) var needsFullDiskAccess = false
 
+    /// Пришло новое уведомление — остров показывает его карточкой.
+    var onNew: ((AppNotification) -> Void)?
+
+    /// Базу Центра уведомлений мы только читаем, поэтому «удалённое» просто скрываем у себя.
+    private var raw: [AppNotification] = []
+    private var dismissedIDs = Set(UserDefaults.standard.stringArray(forKey: "notifications.dismissed") ?? [])
+    private var clearedBefore = (UserDefaults.standard.dictionary(forKey: "notifications.clearedBefore") as? [String: Date]) ?? [:]
+    private var newestSeen: Date?
+
     private let path = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Group Containers/group.com.apple.usernoted/db2/db").path
     private var timer: Timer?
@@ -28,13 +37,63 @@ final class SystemNotificationsReader: ObservableObject {
 
     init() {
         reload()
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.reloadIfChanged() }
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.reloadIfChanged() }
     }
 
     func openFullDiskAccessSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    /// Для снапшотов.
+    func debugSet(_ items: [AppNotification]) {
+        timer?.invalidate()
+        needsFullDiskAccess = false
+        raw = items
+        dismissedIDs = []
+        clearedBefore = [:]
+        notifications = items
+    }
+
+    func dismiss(_ item: AppNotification) {
+        dismissedIDs.insert(item.id)
+        persistDismissed()
+    }
+
+    func dismissAll(bundleID: String) {
+        clearedBefore[bundleID] = raw.filter { $0.bundleID == bundleID }.map(\.date).max() ?? Date()
+        persistDismissed()
+    }
+
+    func dismissAll() {
+        for bundleID in Set(raw.map(\.bundleID)) { dismissAll(bundleID: bundleID) }
+    }
+
+    private func persistDismissed() {
+        // Храним только id, которые ещё есть в базе, чтобы список не рос бесконечно.
+        let alive = Set(raw.map(\.id))
+        dismissedIDs = dismissedIDs.filter(alive.contains)
+        UserDefaults.standard.set(Array(dismissedIDs), forKey: "notifications.dismissed")
+        UserDefaults.standard.set(clearedBefore, forKey: "notifications.clearedBefore")
+        applyFilter()
+    }
+
+    private func applyFilter() {
+        let visible = raw.filter { item in
+            !dismissedIDs.contains(item.id) && item.date > (clearedBefore[item.bundleID] ?? .distantPast)
+        }
+        if visible != notifications { notifications = visible }
+    }
+
+    private func announceNew(_ items: [AppNotification]) {
+        let newest = items.map(\.date).max()
+        defer { if let newest { newestSeen = max(newestSeen ?? newest, newest) } }
+        // При первом чтении базы ничего не показываем — это старые уведомления.
+        guard let seen = newestSeen,
+              let fresh = items.filter({ $0.date > seen && Date().timeIntervalSince($0.date) < 60 })
+                .max(by: { $0.date < $1.date }) else { return }
+        onNew?(fresh)
     }
 
     private func reloadIfChanged() {
@@ -58,7 +117,9 @@ final class SystemNotificationsReader: ObservableObject {
                     self.needsFullDiskAccess = true
                 case .some(let items):
                     self.needsFullDiskAccess = false
-                    if items != self.notifications { self.notifications = items }
+                    self.raw = items
+                    self.announceNew(items)
+                    self.applyFilter()
                 }
             }
         }

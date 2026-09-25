@@ -20,8 +20,56 @@ struct EventView: View {
                     .padding(.horizontal, 22)
                     .padding(.bottom, 18)
                     .frame(maxHeight: .infinity)
+            case .notification(let item):
+                NotificationEvent(item: item)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+                    .frame(maxHeight: .infinity)
             }
         }
+    }
+}
+
+// MARK: - Уведомление
+
+private struct NotificationEvent: View {
+    var item: AppNotification
+    @ViewState private var appeared = false
+
+    private var appURL: URL? { NSWorkspace.shared.urlForApplication(withBundleIdentifier: item.bundleID) }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if let url = appURL {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
+                } else {
+                    Image(systemName: "app.badge.fill").font(.system(size: 26)).foregroundStyle(.white.opacity(0.6))
+                }
+            }
+            .frame(width: 38, height: 38)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(item.subtitle.isEmpty ? item.title : "\(item.title) · \(item.subtitle)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text("сейчас")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                if !item.body.isEmpty {
+                    Text(item.body)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(2)
+                }
+            }
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : -4)
+        .onAppear { withAnimation(.easeOut(duration: 0.35).delay(0.12)) { appeared = true } }
     }
 }
 
