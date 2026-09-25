@@ -85,8 +85,8 @@ struct IslandRootView: View {
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(y: -10))
                         .animation(.easeOut(duration: 0.3).delay(0.06)),
-                    // Зеркально появлению: содержимое уходит вверх и гаснет, пока остров поднимается.
-                    removal: .opacity.combined(with: .offset(y: -10)).animation(.easeIn(duration: 0.22))))
+                    // Содержимое гаснет одновременно с тем, как остров сжимается вверх и к центру.
+                    removal: .opacity.animation(.easeOut(duration: 0.24))))
         } else if let event = model.event, model.eventExpanded {
             EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
                 .frame(width: event.size.width, height: model.notchSize.height + event.size.height)

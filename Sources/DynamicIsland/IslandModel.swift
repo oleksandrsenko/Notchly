@@ -91,9 +91,9 @@ enum IslandMetrics {
     /// Раскрытие «сверху вниз»: остров быстро расширяется вдоль верхней кромки и следом опускается.
     static let expandWidth = Animation.spring(response: 0.26, dampingFraction: 0.94)
     static let expandHeight = Animation.spring(response: 0.4, dampingFraction: 0.86)
-    /// Сворачивание — зеркально раскрытию: сначала остров поднимается, потом сужается вдоль кромки в вырез.
+    /// Сворачивание: остров одновременно поднимается и сужается к вырезу, содержимое гаснет в то же время.
     static let collapseHeight = Animation.spring(response: 0.34, dampingFraction: 1)
-    static let collapseWidth = Animation.spring(response: 0.28, dampingFraction: 1).delay(0.14)
+    static let collapseWidth = collapseHeight
 }
 
 final class IslandModel: ObservableObject {
