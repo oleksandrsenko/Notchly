@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Начальные состояния отдельных экранов — только для снапшотов.
+enum SnapshotFlags {
+    static var batteryPage = 0
+    static var openedTask: UUID?
+}
+
 /// `DynamicIsland --snapshots <папка>` рендерит все состояния острова в PNG —
 /// удобно проверять вёрстку без записи экрана.
 enum Snapshots {
@@ -53,12 +59,21 @@ enum Snapshots {
         model.event = .notification(AppNotification(id: "1", bundleID: "ru.keepcoder.Telegram", title: "Мама",
                                                     subtitle: "", body: "Ты сегодня приедешь на ужин? Я приготовлю твой любимый пирог 🥧",
                                                     date: Date())); shot("10-notification")
+        model.event = .reminder(Reminder(id: "r", title: "Немецкий — урок 12", date: Date().addingTimeInterval(600),
+                                         minutesBefore: 10, source: .task, link: URL(string: "https://zoom.us/j/123"))); shot("10-reminder")
+        model.event = .reminder(Reminder(id: "c", title: "Созвон с командой", date: Date().addingTimeInterval(300),
+                                         minutesBefore: 5, source: .calendar, link: URL(string: "https://meet.google.com/abc"))); shot("10-reminder-calendar")
         model.event = nil
         model.batteries.debugSet(devices: [
+            DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
+                .init(label: "Левый", symbol: "airpod.left", percent: 100),
+                .init(label: "Правый", symbol: "airpod.right", percent: 18),
+                .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 64, charging: true)]),
             DeviceBattery(name: "Magic Mouse", symbol: "magicmouse.fill", levels: [.init(label: "", symbol: "", percent: 57)])],
             phone: PhoneBattery(percent: 76, charging: true, updated: Date().addingTimeInterval(-600)))
         model.tasks.debugSet([
             TaskItem(text: "Спортзал", time: "17:00"),
+            TaskItem(text: "Немецкий", time: "18:30", notes: "Урок 12: Perfekt\nhttps://www.youtube.com/watch?v=abc\nПовторить слова из прошлого урока"),
             TaskItem(text: "Созвон с командой", time: "22:00"),
             TaskItem(text: "Купить продукты"),
             TaskItem(text: "Ответить на письма", done: true)])
@@ -70,6 +85,16 @@ enum Snapshots {
             tasksHost.cacheDisplay(in: tasksHost.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("11-tasks.png"))
         }
+        SnapshotFlags.openedTask = model.tasks.items[1].id
+        let detailHost = NSHostingView(rootView: TasksView(store: model.tasks, gemini: model.gemini)
+            .frame(width: 596, height: 118).padding(20).background(Color.black).preferredColorScheme(.dark))
+        detailHost.frame = NSRect(x: 0, y: 0, width: 636, height: 158)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        if let rep = detailHost.bitmapImageRepForCachingDisplay(in: detailHost.bounds) {
+            detailHost.cacheDisplay(in: detailHost.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("11-task-detail.png"))
+        }
+        SnapshotFlags.openedTask = nil
         model.isExpanded = true
         model.expandedContentVisible = true
         let clipHost = NSHostingView(rootView: ClipboardView(clipboard: model.clipboard)
@@ -95,6 +120,9 @@ enum Snapshots {
             AppNotification(id: "b", bundleID: "com.apple.Passwords", title: "Пароли", subtitle: "",
                             body: "Обнаружен скомпрометированный пароль", date: Date().addingTimeInterval(-3600))])
         for tab in IslandTab.allCases { model.tab = tab; shot("4-\(tab.rawValue)") }
+        SnapshotFlags.batteryPage = 1
+        model.tab = .music; model.tab = .home; shot("4-home-airpods")
+        SnapshotFlags.batteryPage = 0
         model.tab = .controls
         model.mixer.debugSet(apps: [], levels: [:], muted: [], access: .granted); shot("4-controls-empty")
         model.mixer.debugSet(apps: [], levels: [:], muted: [], access: .denied); shot("4-controls-denied")

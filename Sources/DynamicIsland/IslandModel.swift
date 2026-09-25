@@ -37,6 +37,7 @@ enum IslandEvent: Equatable {
     case charging(BatteryInfo)
     case device(DeviceBattery)
     case notification(AppNotification)
+    case reminder(Reminder)
 
     var isDevice: Bool { if case .device = self { return true } else { return false } }
 
@@ -45,6 +46,15 @@ enum IslandEvent: Equatable {
         case .charging: return IslandMetrics.eventSize
         case .device: return IslandMetrics.deviceSheetSize
         case .notification: return IslandMetrics.notificationSize
+        case .reminder: return IslandMetrics.reminderSize
+        }
+    }
+
+    /// Уведомления и напоминания ждут в очереди, пока показана другая карточка.
+    var isQueued: Bool {
+        switch self {
+        case .notification, .reminder: return true
+        default: return false
         }
     }
 
@@ -52,7 +62,7 @@ enum IslandEvent: Equatable {
         switch self {
         case .charging: return 32
         case .device: return 42
-        case .notification: return 28
+        case .notification, .reminder: return 28
         }
     }
 
@@ -61,6 +71,7 @@ enum IslandEvent: Equatable {
         case .charging: return 4.5
         case .device: return 8
         case .notification: return 4
+        case .reminder: return 8
         }
     }
 }
@@ -82,6 +93,7 @@ enum IslandMetrics {
     static let eventSize = CGSize(width: 440, height: 118)
     static let deviceSheetSize = CGSize(width: 380, height: 236)
     static let notificationSize = CGSize(width: 430, height: 76)
+    static let reminderSize = CGSize(width: 430, height: 80)
     /// Запас окна вокруг острова, чтобы тень и пружинная анимация не обрезались.
     static let windowSize = CGSize(width: 760, height: 320)
     static let spring = Animation.spring(response: 0.46, dampingFraction: 0.84)
@@ -144,6 +156,7 @@ final class IslandModel: ObservableObject {
     let vault = KeyVault()
     let gmail = GmailClient()
     let systemNotifications = SystemNotificationsReader()
+    let reminders: ReminderCenter
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
@@ -155,6 +168,7 @@ final class IslandModel: ObservableObject {
     init(persistent: Bool = true) {
         clipboard = ClipboardMonitor(persistent: persistent)
         tasks = TasksStore(persistent: persistent)
+        reminders = ReminderCenter(tasks: tasks)
         tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .home
 
         keys.handler = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
@@ -162,6 +176,8 @@ final class IslandModel: ObservableObject {
         batteries.onChargerConnected = { [weak self] info in self?.showEvent(.charging(info)) }
         batteries.onAudioDeviceConnected = { [weak self] device in self?.showEvent(.device(device)) }
         systemNotifications.onNew = { [weak self] item in self?.showEvent(.notification(item)) }
+        reminders.onFire = { [weak self] reminder in self?.presentReminder(reminder) }
+        if persistent { reminders.start() }
         gmail.onNew = { [weak self] mail in
             self?.showEvent(.notification(AppNotification(
                 id: "gmail-\(mail.id)", bundleID: AppNotification.gmailID, title: mail.senderName,
@@ -288,7 +304,7 @@ final class IslandModel: ObservableObject {
     func showEvent(_ event: IslandEvent) {
         guard !isExpanded else { return }
         // Пока показана одна карточка, следующие уведомления ждут своей очереди.
-        if self.event != nil, case .notification = event {
+        if self.event != nil, event.isQueued {
             eventQueue.append(event)
             return
         }
@@ -308,6 +324,16 @@ final class IslandModel: ObservableObject {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.84)) { self.eventExpanded = true }
         }
         scheduleEventDismiss(after: event.duration + 0.2)
+    }
+
+    /// Напоминание звучит сразу; если остров сейчас открыт, карточка покажется, как только он закроется.
+    private func presentReminder(_ reminder: Reminder, attempt: Int = 0) {
+        if attempt == 0 { SoftChime.play() }
+        guard isExpanded else { return showEvent(.reminder(reminder)) }
+        guard attempt < 150 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.presentReminder(reminder, attempt: attempt + 1)
+        }
     }
 
     private func scheduleEventDismiss(after delay: TimeInterval) {

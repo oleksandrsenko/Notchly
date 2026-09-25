@@ -6,8 +6,24 @@ struct TasksView: View {
     @ObservedObject var gemini: GeminiAssistant
     @ViewState private var draft = ""
     @FocusState private var draftFocused: Bool
+    /// Задача, у которой открыто описание.
+    @ViewState private var openedID: UUID? = SnapshotFlags.openedTask
 
     var body: some View {
+        ZStack {
+            if let id = openedID, let task = store.items.first(where: { $0.id == id }) {
+                TaskDetailView(task: task, store: store) { close() }
+                    .transition(.opacity.combined(with: .offset(y: 10)))
+            } else {
+                list.transition(.opacity.combined(with: .offset(y: -6)))
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.9), value: openedID)
+    }
+
+    private func close() { openedID = nil }
+
+    private var list: some View {
         HStack(spacing: 12) {
             VStack(spacing: 4) {
                 addRow
@@ -22,6 +38,7 @@ struct TasksView: View {
                             ForEach(store.sorted) { task in
                                 TaskRow(task: task) { store.toggle(task.id) } onDelete: { store.remove(task.id) }
                                     onEdit: { store.update(task.id, text: $0) }
+                                    onOpen: { openedID = task.id }
                                     .transition(.opacity.combined(with: .offset(y: -4)))
                             }
                         }
@@ -63,6 +80,7 @@ private struct TaskRow: View {
     var onToggle: () -> Void
     var onDelete: () -> Void
     var onEdit: (String) -> Void
+    var onOpen: () -> Void
     @ViewState private var hovering = false
     @ViewState private var editing = false
     @ViewState private var draft = ""
@@ -117,6 +135,19 @@ private struct TaskRow: View {
                     .help("Нажмите, чтобы исправить")
             }
             Spacer(minLength: 4)
+            // Стрелочка вниз — описание задачи. Если описание уже есть, она видна всегда.
+            if !editing && (hovering || task.notes != nil) {
+                Button(action: onOpen) {
+                    Image(systemName: task.notes == nil ? "chevron.down" : "text.alignleft")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(.white.opacity(hovering ? 0.8 : 0.4))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .help(task.notes == nil ? "Добавить описание" : "Открыть описание")
+                .transition(.opacity)
+            }
             ZStack(alignment: .trailing) {
                 if let time = task.time {
                     Text(time)
@@ -148,6 +179,134 @@ private struct TaskRow: View {
             .fill(.white.opacity(editing ? 0.1 : hovering ? 0.06 : 0)))
         .contentShape(Rectangle())
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+    }
+}
+
+// MARK: - Описание задачи
+
+/// Описание задачи во всю ширину вкладки: сверху название и время, ниже — текст со ссылками.
+private struct TaskDetailView: View {
+    var task: TaskItem
+    @ObservedObject var store: TasksStore
+    var onClose: () -> Void
+    @ViewState private var notes: String?
+
+    private var text: String { notes ?? task.notes ?? "" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button(action: onClose) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(.white.opacity(0.1)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(PressableStyle())
+                .help("Свернуть описание")
+
+                Text(task.text)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                if let time = task.time {
+                    Text(time)
+                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.7))
+                        .padding(.horizontal, 6)
+                        .frame(height: 17)
+                        .background(Capsule().fill(.white.opacity(0.08)))
+                }
+                Spacer(minLength: 6)
+                // Ссылки из описания — одним нажатием.
+                ForEach(Array(TaskItem.links(in: text).prefix(3).enumerated()), id: \.offset) { _, url in
+                    Button { NSWorkspace.shared.open(url) } label: {
+                        Label(url.host?.replacingOccurrences(of: "www.", with: "") ?? "Ссылка", systemImage: "link")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                            .padding(.horizontal, 9)
+                            .frame(height: 22)
+                            .frame(maxWidth: 150)
+                            .background(Capsule().fill(.white))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .help(url.absoluteString)
+                }
+            }
+
+            ZStack(alignment: .topLeading) {
+                PlainNotesEditor(initial: task.notes ?? "") { value in
+                    notes = value
+                    store.updateNotes(task.id, value)
+                }
+                if text.isEmpty {
+                    Text("Описание: что сделать, ссылка на урок, заметки…")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 7)
+                        .allowsHitTesting(false)
+                }
+            }
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.05)))
+        }
+        .onExitCommand(perform: onClose)
+    }
+}
+
+/// Простой текстовый редактор для описания: ссылки подсвечиваются и открываются кликом.
+private struct PlainNotesEditor: NSViewRepresentable {
+    var initial: String
+    var onChange: (String) -> Void
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = false
+        guard let tv = scroll.documentView as? NSTextView else { return scroll }
+        tv.isRichText = false
+        tv.allowsUndo = true
+        tv.drawsBackground = false
+        tv.font = .systemFont(ofSize: 12.5)
+        tv.textColor = .white
+        tv.insertionPointColor = .white
+        tv.textContainerInset = NSSize(width: 4, height: 7)
+        tv.isAutomaticQuoteSubstitutionEnabled = false
+        tv.isAutomaticLinkDetectionEnabled = true
+        tv.enabledTextCheckingTypes = NSTextCheckingResult.CheckingType.link.rawValue
+        tv.linkTextAttributes = [.foregroundColor: NSColor.systemBlue,
+                                 .underlineStyle: NSUnderlineStyle.single.rawValue,
+                                 .cursor: NSCursor.pointingHand]
+        tv.string = initial
+        tv.checkTextInDocument(nil)
+        tv.delegate = context.coordinator
+        // Сразу ставим курсор в конец — можно печатать.
+        DispatchQueue.main.async {
+            tv.window?.makeFirstResponder(tv)
+            tv.setSelectedRange(NSRange(location: (tv.string as NSString).length, length: 0))
+        }
+        return scroll
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        context.coordinator.onChange = onChange
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(onChange: onChange) }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var onChange: (String) -> Void
+        init(onChange: @escaping (String) -> Void) { self.onChange = onChange }
+
+        func textDidChange(_ notification: Notification) {
+            guard let tv = notification.object as? NSTextView else { return }
+            onChange(tv.string)
+        }
     }
 }
 

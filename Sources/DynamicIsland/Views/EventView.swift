@@ -25,8 +25,69 @@ struct EventView: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 12)
                     .frame(maxHeight: .infinity)
+            case .reminder(let reminder):
+                ReminderEvent(reminder: reminder, onClose: onClose)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+                    .frame(maxHeight: .infinity)
             }
         }
+    }
+}
+
+// MARK: - Напоминание
+
+private struct ReminderEvent: View {
+    var reminder: Reminder
+    var onClose: () -> Void
+    @ViewState private var appeared = false
+
+    private var isCalendar: Bool { reminder.source == .calendar }
+
+    private var linkTitle: String {
+        guard isCalendar else { return "Открыть" }
+        let host = reminder.link?.host ?? ""
+        return ["zoom", "meet.google", "teams", "facetime", "telemost"].contains { host.contains($0) } ? "Подключиться" : "Открыть"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: isCalendar ? "calendar" : "checklist")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(isCalendar ? Color.red.gradient : Color.orange.gradient))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reminder.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Text("Через \(reminder.minutesBefore) мин · \(reminder.date.formatted(date: .omitted, time: .shortened))")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 6)
+            if let link = reminder.link {
+                Button {
+                    NSWorkspace.shared.open(link)
+                    onClose()
+                } label: {
+                    Text(linkTitle)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 12)
+                        .frame(height: 26)
+                        .background(Capsule().fill(isCalendar ? Color.green : Color.white))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+            }
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : -4)
+        .onAppear { withAnimation(.easeOut(duration: 0.35).delay(0.12)) { appeared = true } }
     }
 }
 

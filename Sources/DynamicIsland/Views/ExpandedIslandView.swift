@@ -54,7 +54,6 @@ struct ExpandedIslandView: View {
                 NotificationBell(model: model, gmail: model.gmail, system: model.systemNotifications) {
                     select(model.tab == .notifications ? .home : .notifications)
                 }
-                WeatherChip(service: model.weather)
             }
             .padding(.trailing, 18)
         }
@@ -145,38 +144,6 @@ private struct TabButton: View {
         .buttonStyle(PressableStyle())
         .help(tab.title)
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
-    }
-}
-
-/// Погода в правом углу шапки.
-private struct WeatherChip: View {
-    @ObservedObject var service: WeatherService
-
-    var body: some View {
-        if let w = service.weather {
-            HStack(spacing: 5) {
-                Image(systemName: w.symbol)
-                    .symbolRenderingMode(.multicolor)
-                    .font(.system(size: 13))
-                Text("\(w.temperature)°")
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: Double(w.temperature)))
-                if let city = w.city {
-                    Text(city)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .lineLimit(1)
-                        .frame(maxWidth: 80, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .foregroundStyle(.white.opacity(0.9))
-            .contentShape(Rectangle())
-            .onTapGesture { NSWorkspace.shared.open(w.forecastURL) }
-            .help("Открыть прогноз погоды")
-            .transition(.blurFade)
-        }
     }
 }
 

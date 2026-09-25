@@ -172,7 +172,7 @@ private struct BatteryCarousel: View {
     var headphones: DeviceBattery?
     var accessories: [DeviceBattery]
     var phone: PhoneBattery?
-    @ViewState private var page: Int? = 0
+    @ViewState private var page: Int? = SnapshotFlags.batteryPage
 
     private enum Page { case mac, headphones(DeviceBattery), accessory(DeviceBattery), phone(PhoneBattery) }
 
@@ -291,16 +291,52 @@ private struct BatteryCarousel: View {
     }
 
     private func headphonesPage(_ device: DeviceBattery) -> some View {
-        let level = device.primaryLevel
         let name = device.name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
-        return HStack(spacing: 12) {
-            DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 60)
-            info(title: name,
-                 percent: level?.percent,
-                 note: [level?.label == "Кейс" ? "Кейс" : nil, device.isConnected ? nil : "не подключены"]
-                    .compactMap { $0 }.joined(separator: " · "))
+        let parts = device.levels.filter { !$0.label.isEmpty }
+        return HStack(spacing: 10) {
+            DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 50)
+            if parts.count > 1 {
+                // Наушники с кейсом: левый, правый и кейс — каждый со своим зарядом, в одной карточке.
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(device.isConnected ? name : "\(name) · не подключены")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                    HStack(alignment: .top, spacing: 9) {
+                        ForEach(parts) { level in budLevel(level) }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                let level = device.primaryLevel
+                info(title: name, percent: level?.percent,
+                     note: device.isConnected ? nil : "не подключены")
+            }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
+    }
+
+    /// Один наушник или кейс: подпись и крупный процент, как у MacBook.
+    private func budLevel(_ level: DeviceBattery.Level) -> some View {
+        let short = ["Левый": "Л", "Правый": "П"][level.label] ?? level.label
+        let color: Color = level.charging ? .green : level.percent <= 20 ? .red : .white
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 2) {
+                Text(short)
+                if level.charging {
+                    Image(systemName: "bolt.fill").font(.system(size: 7.5, weight: .bold)).foregroundStyle(.green)
+                }
+            }
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.white.opacity(0.45))
+            Text("\(level.percent)%")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .contentTransition(.numericText(value: Double(level.percent)))
+                .animation(.smooth(duration: 0.6), value: level.percent)
+        }
+        .fixedSize()
     }
 
     private func info(title: String, percent: Int?, charging: Bool = false, note: String?) -> some View {

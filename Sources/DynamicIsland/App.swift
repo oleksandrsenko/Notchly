@@ -13,6 +13,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             exit(0)
         }
+        if CommandLine.arguments.contains("--chime") {
+            print("Сигнал напоминания: \(SoftChime.isAvailable ? "OK" : "не собрался")")
+            SoftChime.play()
+            RunLoop.main.run(until: Date().addingTimeInterval(1.2))
+            exit(0)
+        }
+        if CommandLine.arguments.contains("--reminders-selftest") {
+            let tasks = TasksStore(persistent: false)
+            let f = DateFormatter(); f.dateFormat = "HH:mm"
+            tasks.add("Через 10 минут", time: f.string(from: Date().addingTimeInterval(10 * 60)))
+            tasks.add("Через 5 минут", time: f.string(from: Date().addingTimeInterval(5 * 60)))
+            tasks.add("Через 30 минут", time: f.string(from: Date().addingTimeInterval(30 * 60)))
+            let center = ReminderCenter(tasks: tasks)
+            var fired: [String] = []
+            center.onFire = { fired.append("\($0.title) — за \($0.minutesBefore) мин") }
+            center.start()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            print(fired.isEmpty ? "Ничего не сработало" : fired.joined(separator: "\n"))
+            exit(0)
+        }
         if CommandLine.arguments.contains("--imap-selftest") {
             GmailSelfTest.run()
             exit(0)

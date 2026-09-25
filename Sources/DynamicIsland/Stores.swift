@@ -155,6 +155,17 @@ struct TaskItem: Identifiable, Codable, Equatable {
     /// Время в формате «ЧЧ:ММ», если задача привязана ко времени.
     var time: String?
     var createdAt = Date()
+    /// Описание под задачей: заметки, ссылка на урок и т. п.
+    var notes: String?
+
+    /// Ссылки из описания — открываются кнопками и из напоминания.
+    var links: [URL] { TaskItem.links(in: notes ?? "") }
+
+    static func links(in text: String) -> [URL] {
+        guard !text.isEmpty, let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        else { return [] }
+        return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url)
+    }
 }
 
 /// Компактный список дел. Сохраняется сразу после каждого изменения.
@@ -207,6 +218,14 @@ final class TasksStore: ObservableObject {
         } else {
             items[i].text = trimmed
         }
+        persist()
+    }
+
+    func updateNotes(_ id: UUID, _ notes: String) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        let value = notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notes
+        guard items[i].notes != value else { return }
+        items[i].notes = value
         persist()
     }
 

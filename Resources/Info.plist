@@ -30,6 +30,10 @@
     <string>Нужно, чтобы показывать погоду для вашего города.</string>
     <key>NSAudioCaptureUsageDescription</key>
     <string>Нужно, чтобы менять громкость отдельных приложений.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Нужно, чтобы напоминать о встречах за 10 и 5 минут.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Нужно, чтобы напоминать о встречах за 10 и 5 минут.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Нужно, чтобы показывать и переключать треки в Apple Music и Spotify.</string>
 </dict>
