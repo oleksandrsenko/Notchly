@@ -70,7 +70,7 @@ enum Snapshots {
             tasksHost.cacheDisplay(in: tasksHost.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("11-tasks.png"))
         }
-        model.expand()
+        model.isExpanded = true
         let clipHost = NSHostingView(rootView: ClipboardView(clipboard: model.clipboard)
             .frame(width: 596, height: 130).padding(20).background(Color.black).preferredColorScheme(.dark))
         clipHost.frame = NSRect(x: 0, y: 0, width: 636, height: 170)

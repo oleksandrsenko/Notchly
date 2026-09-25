@@ -14,6 +14,18 @@ enum Keychain {
         return result as? Data
     }
 
+    /// Есть ли запись — без чтения самого секрета, поэтому macOS не показывает запрос доступа.
+    /// (Запрос блокирует вызывающий поток; на главном потоке остров бы замер, пока на него не ответят.)
+    static func contains(service: String, account: String) -> Bool {
+        var query = baseQuery(service: service, account: account)
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUISkip
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        return status == errSecSuccess || status == errSecInteractionNotAllowed
+    }
+
     @discardableResult
     static func set(_ data: Data, service: String, account: String) -> Bool {
         let query = baseQuery(service: service, account: account)

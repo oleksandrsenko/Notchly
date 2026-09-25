@@ -72,15 +72,20 @@ final class GmailClient: ObservableObject {
 
     func refresh() {
         guard let account, !isLoading else { return }
-        guard let data = Keychain.data(service: "gmail", account: account),
-              let password = String(data: data, encoding: .utf8) else {
-            // Обычно после пересборки без постоянной подписи: Связка ключей не отдаёт пароль новой сборке.
-            needsPassword = true
-            error = "Введите пароль приложения ещё раз — старая сборка сохранила его недоступным"
-            return
-        }
         isLoading = true
-        Task {
+        // Пароль читаем не на главном потоке: если macOS спросит доступ к Связке ключей,
+        // остров не должен замереть, пока запрос висит на экране.
+        Task.detached {
+            guard let data = Keychain.data(service: "gmail", account: account),
+                  let password = String(data: data, encoding: .utf8) else {
+                await MainActor.run {
+                    self.isLoading = false
+                    // Обычно после пересборки без постоянной подписи: Связка ключей не отдаёт пароль новой сборке.
+                    self.needsPassword = true
+                    self.error = "Введите пароль приложения ещё раз — старая сборка сохранила его недоступным"
+                }
+                return
+            }
             let result = try? await Self.withTimeout(seconds: 25) {
                 try await Self.fetchUnread(email: account, password: password)
             }

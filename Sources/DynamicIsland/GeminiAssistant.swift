@@ -22,7 +22,7 @@ final class GeminiAssistant: ObservableObject {
     }
 
     init() {
-        hasKey = Keychain.data(service: Self.service, account: Self.account) != nil
+        hasKey = Keychain.contains(service: Self.service, account: Self.account)
     }
 
     func setKey(_ key: String) {

@@ -86,23 +86,24 @@ enum IslandMetrics {
     static let windowSize = CGSize(width: 760, height: 320)
     static let spring = Animation.spring(response: 0.46, dampingFraction: 0.84)
     static let softSpring = Animation.spring(response: 0.55, dampingFraction: 0.9)
-    /// Сворачивание: ширина, высота и содержимое уходят одновременно, одним плавным движением.
-    static let collapse = Animation.spring(response: 0.38, dampingFraction: 1)
-    /// Раскрытие «сверху вниз»: остров быстро расширяется вдоль верхней кромки и следом опускается.
-    static let expandWidth = Animation.spring(response: 0.26, dampingFraction: 0.94)
-    static let expandHeight = Animation.spring(response: 0.4, dampingFraction: 0.86)
-    /// Сворачивание — обратное раскрытию: остров уходит вверх, а по ширине сужается чуть медленнее,
-    /// поэтому движение читается как подъём, а не как схлопывание вбок.
-    static let collapseHeight = Animation.spring(response: 0.34, dampingFraction: 1)
-    static let collapseWidth = Animation.spring(response: 0.42, dampingFraction: 1)
+    /// Сворачивание: без отскока, неспешно, но и не затянуто.
+    static let collapse = Animation.spring(response: 0.6, dampingFraction: 1)
+    /// «Капля» острова: при раскрытии узкая капля выпадает из выреза и растекается в остров,
+    /// при сворачивании остров стягивается обратно в каплю, и она втягивается в вырез.
+    static let dropletOut = Animation.spring(response: 0.3, dampingFraction: 0.86)
+    static let dropletSpread = Animation.spring(response: 0.46, dampingFraction: 0.86)
+    static let dropletGather = Animation.spring(response: 0.4, dampingFraction: 1)
+    static let dropletIn = Animation.spring(response: 0.32, dampingFraction: 1)
+    static let dropletPause: TimeInterval = 0.14
 }
 
 final class IslandModel: ObservableObject {
     @Published var isExpanded = false
-    /// Раскрытое содержимое остаётся в иерархии, пока остров сворачивается, и убирается уже невидимым —
-    /// иначе SwiftUI удаляет его вне общей раскладки, и оно «уезжает» вбок.
-    @Published private(set) var expandedContentMounted = false
-    private var unmountWork: DispatchWorkItem?
+    /// Остров в виде «капли» — промежуточная фаза раскрытия и сворачивания.
+    @Published private(set) var droplet = false
+    private var dropletWork: DispatchWorkItem?
+    /// Капля уже выпадает, раскрытие вот-вот случится.
+    private var opening = false
     @Published var tab: IslandTab {
         didSet {
             if tab == .notifications || oldValue == .notifications { markNotificationsSeen() }
@@ -121,14 +122,6 @@ final class IslandModel: ObservableObject {
     /// Карточка события раскрыта. Сначала из выреза опускается «капля», потом она растекается в карточку.
     @Published var eventExpanded = false
     private var eventQueue: [IslandEvent] = []
-    /// Ширина и высота острова анимируются раздельно — так раскрытие идёт сверху вниз.
-    private(set) var widthAnimation = IslandMetrics.softSpring
-    private(set) var heightAnimation = IslandMetrics.softSpring
-
-    private func animateSize(_ width: Animation, _ height: Animation? = nil) {
-        widthAnimation = width
-        heightAnimation = height ?? width
-    }
     /// Пока курсор над карточкой события, она не закрывается сама.
     var eventHovered = false
     @Published var notchSize = CGSize(width: 200, height: 32)
@@ -194,6 +187,7 @@ final class IslandModel: ObservableObject {
 
     var bottomRadius: CGFloat {
         if isExpanded { return 34 }
+        if droplet { return 22 }
         if let event { return eventExpanded ? event.bottomRadius : 22 }
         if peek && media.hasTrack { return 20 }
         return hasPhysicalNotch ? 11 : 14
@@ -205,6 +199,7 @@ final class IslandModel: ObservableObject {
         if isExpanded {
             return CGSize(width: IslandMetrics.expandedWidth, height: n.height + IslandMetrics.expandedContentHeight)
         }
+        if droplet { return Self.dropletSize(notch: n) }
         if let event {
             if !eventExpanded {
                 return CGSize(width: n.width + 18, height: n.height + 24)
@@ -222,6 +217,11 @@ final class IslandModel: ObservableObject {
             return CGSize(width: n.width + IslandMetrics.compactWing * 2, height: n.height)
         }
         return n
+    }
+
+    /// Та же «капля», что и у карточек событий.
+    static func dropletSize(notch n: CGSize) -> CGSize {
+        CGSize(width: n.width + 18, height: n.height + 24)
     }
 
     /// Полный размер фигуры с учётом изгибов у верхней кромки.
@@ -243,7 +243,8 @@ final class IslandModel: ObservableObject {
             // Каждое открытие начинается с главной.
             self.tab = .home
         }
-        guard !isExpanded else { return }
+        // Уже раскрыт или капля уже выпадает из выреза.
+        guard !isExpanded, !opening else { return }
         hud = nil
         peek = false
         clipPeek = nil
@@ -255,27 +256,51 @@ final class IslandModel: ObservableObject {
             weather.refresh()
         }
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-        unmountWork?.cancel()
-        expandedContentMounted = true
-        animateSize(IslandMetrics.expandWidth, IslandMetrics.expandHeight)
-        withAnimation(IslandMetrics.expandHeight) { isExpanded = true }
+        dropletWork?.cancel()
+        // Капля: сначала узкая капля выпадает из выреза (если остров сворачивался, он уже в виде капли)…
+        opening = true
+        let wasDroplet = droplet
+        if !wasDroplet { withAnimation(IslandMetrics.dropletOut) { droplet = true } }
+        // …и растекается в раскрытый остров.
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.opening = false
+            self.dropletWork = nil
+            withAnimation(IslandMetrics.dropletSpread) {
+                self.droplet = false
+                self.isExpanded = true
+            }
+        }
+        dropletWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (wasDroplet ? 0 : IslandMetrics.dropletPause), execute: work)
     }
 
     func collapse() {
         guard isExpanded else { return }
         vault.lock()
-        animateSize(IslandMetrics.collapseWidth, IslandMetrics.collapseHeight)
-        withAnimation(IslandMetrics.collapseHeight) { isExpanded = false }
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.isExpanded else { return }
-            self.expandedContentMounted = false
+        dropletWork?.cancel()
+        // Остров стягивается обратно в каплю…
+        withAnimation(IslandMetrics.dropletGather) {
+            isExpanded = false
+            droplet = true
         }
-        unmountWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        // …и капля втягивается в вырез.
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.dropletWork = nil
+            withAnimation(IslandMetrics.dropletIn) { self.droplet = false }
+        }
+        dropletWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26, execute: work)
     }
 
     func showEvent(_ event: IslandEvent) {
         guard !isExpanded else { return }
+        // Остров сейчас в виде капли (раскрывается или сворачивается) — покажем карточку чуть позже.
+        if droplet {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.showEvent(event) }
+            return
+        }
         // Пока показана одна карточка, следующие уведомления ждут своей очереди.
         if self.event != nil, case .notification = event {
             eventQueue.append(event)
@@ -285,7 +310,6 @@ final class IslandModel: ObservableObject {
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
         // «Капля»: сначала узкая капля выпадает из выреза…
         eventExpanded = false
-        animateSize(.spring(response: 0.34, dampingFraction: 0.72))
         withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
             hud = nil
             peek = false
@@ -295,8 +319,7 @@ final class IslandModel: ObservableObject {
         // …и почти сразу мягко растекается в карточку.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             guard let self, self.event == event else { return }
-            self.animateSize(.spring(response: 0.3, dampingFraction: 0.9), .spring(response: 0.5, dampingFraction: 0.84))
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) { self.eventExpanded = true }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.84)) { self.eventExpanded = true }
         }
         scheduleEventDismiss(after: event.duration + 0.2)
     }
@@ -319,8 +342,7 @@ final class IslandModel: ObservableObject {
 
     /// Сворачиваем карточку обратно в вырез и показываем следующую из очереди.
     private func hideEvent() {
-        animateSize(IslandMetrics.collapse)
-        withAnimation(IslandMetrics.collapse) {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.95)) {
             eventExpanded = false
             event = nil
         }
@@ -330,9 +352,8 @@ final class IslandModel: ObservableObject {
     }
 
     func showHUD(_ state: HUDState) {
-        guard !isExpanded, event == nil else { return }
+        guard !isExpanded, !droplet, event == nil else { return }
         hudTask?.cancel()
-        animateSize(IslandMetrics.spring)
         withAnimation(IslandMetrics.spring) {
             peek = false
             clipPeek = nil
@@ -363,9 +384,8 @@ final class IslandModel: ObservableObject {
     }
 
     func showClipPeek(_ group: ClipGroup) {
-        guard !isExpanded, hud == nil, event == nil else { return }
+        guard !isExpanded, !droplet, hud == nil, event == nil else { return }
         clipTask?.cancel()
-        animateSize(IslandMetrics.spring)
         withAnimation(IslandMetrics.spring) {
             peek = false
             clipPeek = group
@@ -394,9 +414,8 @@ final class IslandModel: ObservableObject {
     }
 
     func showPeek() {
-        guard !isExpanded, hud == nil, event == nil, media.hasTrack else { return }
+        guard !isExpanded, !droplet, hud == nil, event == nil, media.hasTrack else { return }
         peekTask?.cancel()
-        animateSize(IslandMetrics.softSpring)
         if !peek { withAnimation(IslandMetrics.softSpring) { peek = true } }
         let task = DispatchWorkItem { [weak self] in
             withAnimation(IslandMetrics.softSpring) { self?.peek = false }
