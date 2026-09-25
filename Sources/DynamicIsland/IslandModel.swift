@@ -3,8 +3,11 @@ import SwiftUI
 import Combine
 
 enum IslandTab: String, CaseIterable, Identifiable {
-    case home, music, shelf, notes, controls
+    case home, music, shelf, notes, controls, notifications
     var id: String { rawValue }
+
+    /// Вкладки в шапке. Уведомления открываются колокольчиком справа.
+    static let bar: [IslandTab] = [.home, .music, .shelf, .notes, .controls]
 
     var icon: String {
         switch self {
@@ -13,6 +16,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .shelf: return "folder.fill"
         case .notes: return "note.text"
         case .controls: return "slider.horizontal.3"
+        case .notifications: return "bell.fill"
         }
     }
 
@@ -23,6 +27,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .shelf: return "Файлы"
         case .notes: return "Заметки"
         case .controls: return "Управление"
+        case .notifications: return "Уведомления"
         }
     }
 }
@@ -60,8 +65,14 @@ enum IslandMetrics {
 final class IslandModel: ObservableObject {
     @Published var isExpanded = false
     @Published var tab: IslandTab {
-        didSet { UserDefaults.standard.set(tab.rawValue, forKey: "island.tab") }
+        didSet {
+            if tab == .notifications || oldValue == .notifications { markNotificationsSeen() }
+            if tab != .notifications { UserDefaults.standard.set(tab.rawValue, forKey: "island.tab") }
+        }
     }
+    /// Всё, что пришло раньше этого момента, считается просмотренным (для счётчика на колокольчике).
+    @Published private(set) var notificationsSeenAt =
+        UserDefaults.standard.object(forKey: "notifications.seen") as? Date ?? .distantPast
     @Published var hud: HUDState?
     @Published var peek = false
     @Published var isDropTargeted = false
@@ -82,7 +93,9 @@ final class IslandModel: ObservableObject {
     let batteries = DeviceBatteryMonitor()
     let keys = MediaKeyInterceptor()
     let weather = WeatherService()
-    let keyboard = KeyboardLayoutMonitor()
+    let vault = KeyVault()
+    let gmail = GmailClient()
+    let systemNotifications = SystemNotificationsReader()
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
@@ -153,6 +166,11 @@ final class IslandModel: ObservableObject {
 
     // MARK: - Состояния
 
+    private func markNotificationsSeen() {
+        notificationsSeenAt = Date()
+        UserDefaults.standard.set(notificationsSeenAt, forKey: "notifications.seen")
+    }
+
     func expand(to tab: IslandTab? = nil) {
         if let tab { self.tab = tab }
         guard !isExpanded else { return }
@@ -170,6 +188,7 @@ final class IslandModel: ObservableObject {
 
     func collapse() {
         guard isExpanded else { return }
+        vault.lock()
         withAnimation(IslandMetrics.softSpring) { isExpanded = false }
     }
 
@@ -177,8 +196,8 @@ final class IslandModel: ObservableObject {
         guard !isExpanded else { return }
         eventTask?.cancel()
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-        // Пружина с небольшим перелётом — остров «выпрыгивает».
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.66)) {
+        // Плавное раскрытие без перелёта, как карточки на iPhone.
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) {
             hud = nil
             peek = false
             clipPeek = nil

@@ -8,6 +8,13 @@ struct Weather: Equatable {
     var code: Int
     var isDay: Bool
     var city: String?
+    var latitude: Double
+    var longitude: Double
+
+    /// Страница с прогнозом на несколько дней вперёд.
+    var forecastURL: URL {
+        URL(string: String(format: "https://yandex.ru/pogoda/?lat=%.4f&lon=%.4f", latitude, longitude))!
+    }
 
     var symbol: String {
         switch code {
@@ -127,7 +134,8 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
                 guard let self else { return }
                 self.weather = Weather(temperature: Int(temp.rounded()), high: Int(high.rounded()),
                                        low: Int(low.rounded()), code: current["weather_code"] as? Int ?? 3,
-                                       isDay: (current["is_day"] as? Int ?? 1) == 1, city: self.city)
+                                       isDay: (current["is_day"] as? Int ?? 1) == 1, city: self.city,
+                                       latitude: c.latitude, longitude: c.longitude)
             }
         }.resume()
     }

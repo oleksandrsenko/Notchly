@@ -43,13 +43,18 @@ struct IslandRootView: View {
             content
                 .frame(width: model.bodySize.width, height: model.bodySize.height, alignment: .top)
                 .padding(.horizontal, model.topRadius)
-                .background(Color.black)
                 .clipShape(shape)
+                // Тень рисуем только у фона. Если повесить её на весь остров,
+                // SwiftUI отбрасывает тень от каждой надписи, и текст выглядит размытым.
+                .background {
+                    shape
+                        .fill(Color.black)
+                        .shadow(color: .black.opacity(model.isExpanded || model.event != nil ? 0.5 : 0), radius: 16, y: 6)
+                }
                 .overlay {
                     // Подсветка краёв при перетаскивании файла.
                     shape.stroke(Color.white.opacity(model.isDropTargeted ? 0.35 : 0), lineWidth: 1.5)
                 }
-                .shadow(color: .black.opacity(model.isExpanded ? 0.55 : 0), radius: 18, y: 8)
                 .onDrop(of: [.fileURL], isTargeted: $model.isDropTargeted, perform: handleDrop)
             Spacer(minLength: 0)
         }
@@ -59,7 +64,7 @@ struct IslandRootView: View {
         .animation(IslandMetrics.spring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
         .animation(IslandMetrics.spring, value: model.clipPeek)
-        .animation(.spring(response: 0.55, dampingFraction: 0.66), value: model.event)
+        .animation(.spring(response: 0.5, dampingFraction: 0.86), value: model.event)
         .preferredColorScheme(.dark)
         .onChange(of: model.isDropTargeted) { _, targeted in
             if targeted { model.expand(to: .shelf) }
@@ -78,19 +83,19 @@ struct IslandRootView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { if !event.isDevice { model.dismissEvent() } }
                 .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.85, anchor: .top)).animation(IslandMetrics.spring.delay(0.06)),
+                    insertion: .opacity.animation(.smooth(duration: 0.3).delay(0.1)),
                     removal: .opacity.animation(.easeOut(duration: 0.15))))
         } else if let hud = model.hud {
             HUDView(state: hud, notchWidth: model.notchSize.width)
-                .transition(.opacity.combined(with: .blurReplace))
+                .transition(.opacity)
         } else if let group = model.clipPeek {
             ClipPeekView(group: group, icon: model.clipboard.icon(for: group.bundleID),
                          notchWidth: model.notchSize.width)
                 .id(group.items.first?.id)
-                .transition(.opacity.combined(with: .blurReplace))
+                .transition(.opacity)
         } else if media.showsLiveActivity || (model.peek && media.hasTrack) {
             CompactMusicView(media: media, model: model, ns: ns)
-                .transition(.opacity.combined(with: .blurReplace))
+                .transition(.opacity)
         } else {
             Color.clear
         }

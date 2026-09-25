@@ -13,6 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             exit(0)
         }
+        if CommandLine.arguments.contains("--imap-selftest") {
+            GmailSelfTest.run()
+            exit(0)
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate

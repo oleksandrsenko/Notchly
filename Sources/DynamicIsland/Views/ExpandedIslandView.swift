@@ -42,7 +42,7 @@ struct ExpandedIslandView: View {
     private var header: some View {
         HStack(spacing: 0) {
             HStack(spacing: 4) {
-                ForEach(IslandTab.allCases) { tab in
+                ForEach(IslandTab.bar) { tab in
                     TabButton(tab: tab, selected: model.tab == tab, badge: badge(for: tab), ns: tabNS) {
                         select(tab)
                     }
@@ -50,9 +50,11 @@ struct ExpandedIslandView: View {
             }
             .padding(.leading, 16)
             Spacer(minLength: model.notchSize.width + 20)
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                NotificationBell(model: model, gmail: model.gmail, system: model.systemNotifications) {
+                    select(model.tab == .notifications ? .home : .notifications)
+                }
                 WeatherChip(service: model.weather)
-                LanguageChip(keyboard: model.keyboard)
             }
             .padding(.trailing, 18)
         }
@@ -76,7 +78,8 @@ struct ExpandedIslandView: View {
         case .home: HomeView(model: model, media: media, batteries: model.batteries) { select(.music) }
         case .music: MusicPlayerView(media: media, ns: ns)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
-        case .notes: NotesView(store: model.notes, clipboard: model.clipboard)
+        case .notes: NotesView(store: model.notes, clipboard: model.clipboard, vault: model.vault)
+        case .notifications: NotificationsView(gmail: model.gmail, system: model.systemNotifications)
         case .controls: ControlsView(volume: model.volume, brightness: model.brightness)
         }
     }
@@ -125,26 +128,6 @@ private struct TabButton: View {
     }
 }
 
-/// Текущий язык клавиатуры; при переключении буквы перелистываются.
-private struct LanguageChip: View {
-    @ObservedObject var keyboard: KeyboardLayoutMonitor
-
-    var body: some View {
-        if !keyboard.code.isEmpty {
-            Text(keyboard.code)
-                .font(.system(size: 10.5, weight: .bold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.9))
-                .id(keyboard.code)
-                .transition(.push(from: .bottom).combined(with: .opacity))
-                .frame(width: 28, height: 18)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.white.opacity(0.14)))
-                .clipped()
-                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: keyboard.code)
-                .help("Раскладка клавиатуры")
-        }
-    }
-}
-
 /// Погода в правом углу шапки.
 private struct WeatherChip: View {
     @ObservedObject var service: WeatherService
@@ -169,8 +152,53 @@ private struct WeatherChip: View {
                 }
             }
             .foregroundStyle(.white.opacity(0.9))
+            .contentShape(Rectangle())
+            .onTapGesture { NSWorkspace.shared.open(w.forecastURL) }
+            .help("Открыть прогноз погоды")
             .transition(.blurFade)
         }
+    }
+}
+
+/// Колокольчик центра уведомлений со счётчиком новых.
+private struct NotificationBell: View {
+    @ObservedObject var model: IslandModel
+    @ObservedObject var gmail: GmailClient
+    @ObservedObject var system: SystemNotificationsReader
+    var action: () -> Void
+    @ViewState private var hovering = false
+
+    private var unseen: Int {
+        let seen = model.notificationsSeenAt
+        return gmail.mails.filter { $0.date > seen }.count + system.notifications.filter { $0.date > seen }.count
+    }
+
+    var body: some View {
+        let selected = model.tab == .notifications
+        Button(action: action) {
+            Image(systemName: selected ? "bell.fill" : "bell")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(selected ? .black : .white.opacity(hovering ? 1 : 0.75))
+                .symbolEffect(.bounce, value: unseen)
+                .frame(width: 26, height: 22)
+                .background(Capsule().fill(selected ? .white : .white.opacity(hovering ? 0.12 : 0)))
+                .overlay(alignment: .topTrailing) {
+                    if unseen > 0 && !selected {
+                        Text("\(min(unseen, 99))")
+                            .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 3.5)
+                            .frame(minWidth: 13, minHeight: 13)
+                            .background(Capsule().fill(Color.red))
+                            .offset(x: 5, y: -3)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .help("Центр уведомлений")
+        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
     }
 }
 

@@ -15,6 +15,17 @@ struct DeviceBattery: Identifiable, Equatable {
     var name: String
     var symbol: String
     var levels: [Level]
+    var isConnected = true
+
+    var isHeadphones: Bool {
+        let n = name.lowercased()
+        return n.contains("airpods") || n.contains("beats") || symbol.contains("headphones") || symbol.contains("airpods")
+    }
+
+    /// Для наушников с кейсом показываем заряд кейса, иначе — минимальный из имеющихся.
+    var primaryLevel: Level? {
+        levels.first { $0.label == "Кейс" } ?? levels.min { $0.percent < $1.percent }
+    }
 }
 
 /// Заряд Mac и подключённых Bluetooth-устройств (AirPods, наушники, мышь, клавиатура),
@@ -22,6 +33,12 @@ struct DeviceBattery: Identifiable, Equatable {
 final class DeviceBatteryMonitor: NSObject, ObservableObject {
     @Published private(set) var mac: BatteryInfo?
     @Published private(set) var devices: [DeviceBattery] = []
+
+    /// Наушники для карточки на главной: сначала подключённые, иначе последний известный заряд.
+    var headphones: DeviceBattery? {
+        let all = devices.filter(\.isHeadphones)
+        return all.first(where: \.isConnected) ?? all.first
+    }
 
     var onChargerConnected: ((BatteryInfo) -> Void)?
     var onAudioDeviceConnected: ((DeviceBattery) -> Void)?
@@ -88,7 +105,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.refresh {
                 guard let self else { return }
-                let device = self.devices.first { $0.name == name }
+                let device = self.devices.first { $0.name == name && $0.isConnected }
                     ?? DeviceBattery(name: name, symbol: Self.symbol(for: name, info: ["device_minorType": "Headphones"]),
                                      levels: [])
                 self.onAudioDeviceConnected?(device)
@@ -112,12 +129,15 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 
         var result: [DeviceBattery] = []
         for controller in controllers {
-            for entry in controller["device_connected"] as? [[String: Any]] ?? [] {
-                for (name, value) in entry {
-                    guard let info = value as? [String: Any] else { continue }
-                    let levels = parseLevels(info, name: name)
-                    guard !levels.isEmpty else { continue }
-                    result.append(DeviceBattery(name: name, symbol: symbol(for: name, info: info), levels: levels))
+            for (key, connected) in [("device_connected", true), ("device_not_connected", false)] {
+                for entry in controller[key] as? [[String: Any]] ?? [] {
+                    for (name, value) in entry {
+                        guard let info = value as? [String: Any] else { continue }
+                        let levels = parseLevels(info, name: name)
+                        guard !levels.isEmpty else { continue }
+                        result.append(DeviceBattery(name: name, symbol: symbol(for: name, info: info),
+                                                    levels: levels, isConnected: connected))
+                    }
                 }
             }
         }

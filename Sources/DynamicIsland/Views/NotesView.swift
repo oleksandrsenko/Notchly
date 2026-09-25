@@ -2,11 +2,13 @@ import SwiftUI
 
 struct NotesView: View {
     enum Mode: String, CaseIterable {
-        case notes = "Заметки", clipboard = "Буфер обмена"
+        case notes = "Заметки", clipboard = "Буфер обмена", vault = "API-ключи"
+        static let segments: [Mode] = [.notes, .clipboard]
     }
 
     @ObservedObject var store: NotesStore
     @ObservedObject var clipboard: ClipboardMonitor
+    @ObservedObject var vault: KeyVault
     @FocusState private var editorFocused: Bool
     @ViewState private var mode: Mode = .notes
     @Namespace private var segmentNS
@@ -15,7 +17,7 @@ struct NotesView: View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 HStack(spacing: 2) {
-                    ForEach(Mode.allCases, id: \.self) { item in
+                    ForEach(Mode.segments, id: \.self) { item in
                         Button {
                             withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) { mode = item }
                         } label: {
@@ -37,6 +39,27 @@ struct NotesView: View {
                 .padding(2)
                 .background(Capsule().fill(.white.opacity(0.08)))
 
+                // Кнопка ключей «выезжает» рядом, когда открыт буфер обмена.
+                if mode != .notes {
+                    Button {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                            mode = mode == .vault ? .clipboard : .vault
+                        }
+                    } label: {
+                        Label("API-ключи", systemImage: vault.isUnlocked ? "lock.open.fill" : "lock.fill")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(mode == .vault ? .black : .yellow.opacity(0.9))
+                            .padding(.horizontal, 10)
+                            .frame(height: 26)
+                            .background(Capsule().fill(mode == .vault ? Color.yellow : Color.yellow.opacity(0.14)))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity).combined(with: .scale(scale: 0.6, anchor: .leading)),
+                        removal: .opacity.combined(with: .scale(scale: 0.6, anchor: .leading))))
+                }
+
                 Spacer()
 
                 if mode == .notes {
@@ -46,7 +69,7 @@ struct NotesView: View {
                     }
                     .foregroundStyle(.white.opacity(0.8))
                     .transition(.blurFade)
-                } else if !clipboard.groups.isEmpty {
+                } else if mode == .clipboard && !clipboard.groups.isEmpty {
                     Button("Очистить") { clipboard.clear() }
                         .buttonStyle(.plain)
                         .font(.system(size: 11.5, weight: .medium))
@@ -60,8 +83,12 @@ struct NotesView: View {
                     notes
                         .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .leading))
                             .combined(with: .opacity))
-                } else {
+                } else if mode == .clipboard {
                     ClipboardView(clipboard: clipboard)
+                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing))
+                            .combined(with: .opacity))
+                } else {
+                    KeyVaultView(vault: vault)
                         .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing))
                             .combined(with: .opacity))
                 }
@@ -69,7 +96,10 @@ struct NotesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
         }
-        .onDisappear { store.persist() }
+        .onDisappear {
+            store.persist()
+            vault.lock()
+        }
     }
 
     private var notes: some View {

@@ -38,14 +38,13 @@ private struct BlurFadeModifier: ViewModifier {
     var active: Bool
     func body(content: Content) -> some View {
         content
-            .blur(radius: active ? 10 : 0)
             .opacity(active ? 0 : 1)
-            .scaleEffect(active ? 1.06 : 1)
+            .scaleEffect(active ? 1.03 : 1)
     }
 }
 
 extension AnyTransition {
-    /// Мягкое появление/исчезновение с размытием.
+    /// Мягкое появление/исчезновение (без размытия — текст остаётся чётким).
     static var blurFade: AnyTransition {
         .modifier(active: BlurFadeModifier(active: true), identity: BlurFadeModifier(active: false))
     }
@@ -60,7 +59,6 @@ struct StaggeredAppear: ViewModifier {
         content
             .opacity(visible ? 1 : 0)
             .offset(y: visible ? 0 : 8)
-            .blur(radius: visible ? 0 : 6)
             .onAppear {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.82).delay(0.04 + Double(index) * 0.045)) {
                     visible = true

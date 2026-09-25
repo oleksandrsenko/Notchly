@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Главная: часы, дата, мини-плеер и заряд Mac и подключённых устройств.
+/// Главная: часы, дата, мини-плеер, погода и заряд MacBook / наушников.
 struct HomeView: View {
     @ObservedObject var model: IslandModel
     @ObservedObject var media: MediaController
@@ -18,27 +18,11 @@ struct HomeView: View {
                 .frame(width: 1)
                 .padding(.vertical, 10)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    WeatherCard(service: model.weather).staggered(1)
-                    if let mac = batteries.mac {
-                        BatteryCard(name: "MacBook", levels: [
-                            .init(label: mac.charging ? "Заряжается" : "", symbol: "laptopcomputer",
-                                  percent: mac.percent, charging: mac.charging),
-                        ], fallbackSymbol: "laptopcomputer")
-                        .staggered(1)
-                    }
-                    ForEach(Array(batteries.devices.enumerated()), id: \.element.id) { i, device in
-                        BatteryCard(name: device.name, levels: device.levels, fallbackSymbol: device.symbol)
-                            .staggered(2 + i)
-                            .transition(.scale(scale: 0.8).combined(with: .opacity))
-                    }
-                    if batteries.devices.isEmpty {
-                        NoDevicesCard().staggered(2)
-                    }
-                }
-                .frame(maxHeight: .infinity)
+            HStack(spacing: 10) {
+                WeatherCard(service: model.weather).staggered(1)
+                BatteryCarousel(mac: batteries.mac, headphones: batteries.headphones).staggered(2)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: batteries.devices)
         .onAppear { batteries.refresh() }
@@ -88,38 +72,6 @@ struct HomeView: View {
             .buttonStyle(PressableStyle())
             .transition(.blurFade)
         }
-    }
-}
-
-private struct BatteryCard: View {
-    var name: String
-    var levels: [DeviceBattery.Level]
-    var fallbackSymbol: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                ForEach(levels) { level in
-                    VStack(spacing: 5) {
-                        BatteryRing(percent: level.percent, charging: level.charging,
-                                    symbol: level.symbol.isEmpty ? fallbackSymbol : level.symbol)
-                        Text(level.label.isEmpty ? "\(level.percent)%" : "\(level.label) · \(level.percent)%")
-                            .font(.system(size: 9.5, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.white.opacity(0.6))
-                            .lineLimit(1)
-                    }
-                }
-            }
-            Text(name)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(minWidth: 96)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.06)))
     }
 }
 
@@ -195,30 +147,117 @@ private struct WeatherCard: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(width: 132, height: 104, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .onTapGesture { if let w = service.weather { NSWorkspace.shared.open(w.forecastURL) } }
+        .help("Открыть прогноз погоды на несколько дней")
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(LinearGradient(colors: [Color(white: 0.16), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)))
     }
 }
 
-private struct NoDevicesCard: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "headphones")
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(.white.opacity(0.35))
-                .frame(width: 46, height: 46)
-            Text("Наушники\nне подключены")
-                .font(.system(size: 10.5, weight: .medium))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.45))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.04)))
-    }
-}
-
 private extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+
+/// Одна карточка заряда, которую можно листать: MacBook ↔ наушники.
+private struct BatteryCarousel: View {
+    var mac: BatteryInfo?
+    var headphones: DeviceBattery?
+    @ViewState private var page: Int? = 0
+
+    private var pageCount: Int { headphones == nil ? 1 : 2 }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    macPage
+                        .containerRelativeFrame(.horizontal)
+                        .id(0)
+                    if let headphones {
+                        headphonesPage(headphones)
+                            .containerRelativeFrame(.horizontal)
+                            .id(1)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $page)
+
+            if pageCount > 1 {
+                HStack(spacing: 5) {
+                    ForEach(0..<pageCount, id: \.self) { i in
+                        Capsule()
+                            .fill(.white.opacity((page ?? 0) == i ? 0.9 : 0.25))
+                            .frame(width: (page ?? 0) == i ? 14 : 5, height: 5)
+                            .onTapGesture { withAnimation(.smooth(duration: 0.35)) { page = i } }
+                    }
+                }
+                .animation(.smooth(duration: 0.25), value: page)
+            }
+        }
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .frame(height: 104)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.06)))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var macPage: some View {
+        HStack(spacing: 12) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "laptopcomputer")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(LinearGradient(colors: [.white, Color(white: 0.75)], startPoint: .top, endPoint: .bottom))
+                if mac?.charging == true {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.green)
+                        .offset(x: 6, y: -4)
+                }
+            }
+            .frame(width: 60)
+            info(title: "MacBook", percent: mac?.percent, note: mac?.charging == true ? "Заряжается" : nil)
+        }
+        .padding(.horizontal, 14)
+    }
+
+    private func headphonesPage(_ device: DeviceBattery) -> some View {
+        let level = device.primaryLevel
+        let name = device.name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
+        return HStack(spacing: 12) {
+            DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 60)
+            info(title: name,
+                 percent: level?.percent,
+                 note: [level?.label == "Кейс" ? "Кейс" : nil, device.isConnected ? nil : "не подключены"]
+                    .compactMap { $0 }.joined(separator: " · "))
+        }
+        .padding(.horizontal, 14)
+    }
+
+    private func info(title: String, percent: Int?, note: String?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(1)
+            if let percent {
+                HStack(spacing: 6) {
+                    Text("\(percent)%")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                    BatteryGlyph(percent: percent)
+                }
+            }
+            if let note, !note.isEmpty {
+                Text(note)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }

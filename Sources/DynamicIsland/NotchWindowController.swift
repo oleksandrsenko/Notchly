@@ -31,6 +31,7 @@ final class NotchWindowController {
     private var expandWork: DispatchWorkItem?
     private var collapseWork: DispatchWorkItem?
     private var dragChangeCount = NSPasteboard(name: .drag).changeCount
+    private let menuBarGuard = MenuBarGuard()
 
     init() {
         let root = IslandRootView(model: model, media: model.media)
@@ -44,6 +45,13 @@ final class NotchWindowController {
         // Без этого после программного перемещения курсора он «замирает» на четверть секунды.
         CGEventSource(stateID: .combinedSessionState)?.localEventsSuppressionInterval = 0
         model.keys.start()
+        menuBarGuard.zone = { [weak self] in
+            guard let self else { return nil }
+            let rect = self.islandRect().insetBy(dx: -14, dy: 0)
+            let primaryTop = NSScreen.screens.first?.frame.maxY ?? self.screen.frame.maxY
+            return (rect.minX...rect.maxX, primaryTop - self.screen.frame.maxY)
+        }
+        menuBarGuard.start()
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
@@ -170,7 +178,8 @@ final class NotchWindowController {
     /// Строка меню (при автоскрытии или в полноэкранном режиме) выезжает, когда курсор касается
     /// самого верхнего ряда пикселей. Над островом не даём курсору туда дойти — чуть опускаем его.
     private func preventMenuBarReveal() {
-        guard NSEvent.pressedMouseButtons == 0 else { return }
+        // Если есть доступ к событиям, это уже сделал MenuBarGuard — раньше и надёжнее.
+        guard !menuBarGuard.isActive, NSEvent.pressedMouseButtons == 0 else { return }
         let location = NSEvent.mouseLocation
         let zone = islandRect().insetBy(dx: -12, dy: 0)
         guard location.x >= zone.minX, location.x <= zone.maxX,

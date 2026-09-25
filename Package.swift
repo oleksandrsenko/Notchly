@@ -18,7 +18,9 @@ let package = Package(
                 .linkedFramework("ServiceManagement"),
                 .linkedFramework("IOBluetooth"),
                 .linkedFramework("CoreLocation"),
-                .linkedFramework("Carbon"),
+                .linkedFramework("LocalAuthentication"),
+                .linkedFramework("Network"),
+                .linkedLibrary("sqlite3"),
             ]
         )
     ]
