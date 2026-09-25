@@ -63,6 +63,7 @@ struct IslandRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onDrop(of: [.fileURL], isTargeted: $model.isDropTargeted, perform: handleDrop)
         .animation(IslandMetrics.softSpring, value: media.showsLiveActivity)
+        .animation(IslandMetrics.softSpring, value: model.focus.isActive)
         .animation(IslandMetrics.softSpring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
         .animation(IslandMetrics.spring, value: model.clipPeek)
@@ -94,12 +95,16 @@ struct IslandRootView: View {
                 .allowsHitTesting(model.expandedContentVisible)
                 .transition(.identity)
         } else if let event = model.event, model.eventExpanded {
-            EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
-                .frame(width: event.size.width, height: model.notchSize.height + event.size.height)
+            EventView(event: event, model: model) { model.dismissEvent() }
+                .frame(width: body.width, height: body.height)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if case .notification(let item) = event { openApp(item.bundleID) }
-                    if !event.isDevice { model.dismissEvent() }
+                    switch event {
+                    case .device(let device): model.showDeviceSheet(device)
+                    case .notification(let item): openApp(item.bundleID); model.dismissEvent()
+                    case .deviceSheet, .reminder, .focus: break
+                    default: model.dismissEvent()
+                    }
                 }
                 .transition(.asymmetric(
                     insertion: .opacity.animation(.easeOut(duration: 0.3).delay(0.12)),
@@ -115,6 +120,10 @@ struct IslandRootView: View {
                          notchWidth: model.notchSize.width)
                 .frame(width: body.width, height: body.height)
                 .id(group.items.first?.id)
+                .transition(Self.compactTransition)
+        } else if model.focus.isActive && !model.peek {
+            FocusCompactView(focus: model.focus, notchWidth: model.notchSize.width)
+                .frame(width: body.width, height: body.height)
                 .transition(Self.compactTransition)
         } else if media.showsLiveActivity || (model.peek && media.hasTrack) {
             CompactMusicView(media: media, model: model)

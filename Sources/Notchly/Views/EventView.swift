@@ -3,35 +3,184 @@ import SwiftUI
 /// Всплывающая карточка события, как на iPhone: зарядка MacBook или подключение наушников.
 struct EventView: View {
     var event: IslandEvent
-    var notchHeight: CGFloat
+    var model: IslandModel
     var onClose: () -> Void
 
+    private var notchHeight: CGFloat { model.notchSize.height }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Color.clear.frame(height: notchHeight)
-            switch event {
-            case .charging(let info):
-                ChargingEvent(info: info)
-                    .padding(.horizontal, 26)
-                    .padding(.bottom, 16)
-                    .frame(maxHeight: .infinity)
-            case .device(let device):
+        if case .device(let device) = event {
+            CompactDeviceEvent(device: device, notchWidth: model.notchSize.width)
+        } else {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: notchHeight)
+                card
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var card: some View {
+        switch event {
+        case .charging(let info):
+            ChargingEvent(info: info)
+                .padding(.horizontal, 26)
+                .padding(.bottom, 16)
+                .frame(maxHeight: .infinity)
+        case .device, .deviceSheet:
+            if case .deviceSheet(let device) = event {
                 DeviceSheet(device: device, onClose: onClose)
                     .padding(.horizontal, 22)
                     .padding(.bottom, 18)
                     .frame(maxHeight: .infinity)
-            case .notification(let item):
-                NotificationEvent(item: item)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
-                    .frame(maxHeight: .infinity)
-            case .reminder(let reminder):
-                ReminderEvent(reminder: reminder, onClose: onClose)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
-                    .frame(maxHeight: .infinity)
+            }
+        case .notification(let item):
+            NotificationEvent(item: item)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+                .frame(maxHeight: .infinity)
+        case .reminder(let reminder):
+            ReminderEvent(reminder: reminder, model: model, onClose: onClose)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+                .frame(maxHeight: .infinity)
+        case .focus(let transition):
+            FocusEvent(transition: transition, model: model)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+                .frame(maxHeight: .infinity)
+        }
+    }
+}
+
+/// Небольшая кнопка-капсула для карточек.
+private struct CardButton: View {
+    var title: String
+    var systemImage: String? = nil
+    var prominent = false
+    var tint: Color = .white
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let systemImage { Image(systemName: systemImage).font(.system(size: 10.5, weight: .bold)) }
+                Text(title).font(.system(size: 11.5, weight: .semibold))
+            }
+            .foregroundStyle(prominent ? .black : .white.opacity(0.85))
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(Capsule().fill(prominent ? AnyShapeStyle(tint) : AnyShapeStyle(.white.opacity(0.14))))
+            .contentShape(Capsule())
+            .fixedSize()
+        }
+        .buttonStyle(PressableStyle())
+    }
+}
+
+// MARK: - Наушники подключились (компактно)
+
+/// Как на iPhone: слева наушники в кольце заряда, справа кейс с дугой заряда.
+private struct CompactDeviceEvent: View {
+    var device: DeviceBattery
+    var notchWidth: CGFloat
+    @ViewState private var appeared = false
+
+    private var buds: DeviceBattery.Level? {
+        let pair = device.levels.filter { $0.label == "Левый" || $0.label == "Правый" }
+        return pair.min { $0.percent < $1.percent } ?? (device.levels.count == 1 ? device.levels.first : nil)
+    }
+    private var casing: DeviceBattery.Level? { device.levels.first { $0.label == "Кейс" } }
+    private var caseSymbol: String {
+        casing?.symbol.isEmpty == false ? casing!.symbol : "airpodspro.chargingcase.wireless.fill"
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ring(level: buds, symbol: device.symbol)
+                .padding(.leading, 12)
+            Spacer(minLength: notchWidth)
+            if casing != nil {
+                ring(level: casing, symbol: caseSymbol)
+                    .padding(.trailing, 12)
+            } else if let buds {
+                Text("\(buds.percent)%")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(BatteryTint.color(buds.percent))
+                    .padding(.trailing, 14)
             }
         }
+        .frame(maxHeight: .infinity)
+        .opacity(appeared ? 1 : 0)
+        .onAppear { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { appeared = true } }
+        .help("Нажмите, чтобы увидеть заряд подробнее")
+    }
+
+    private func ring(level: DeviceBattery.Level?, symbol: String) -> some View {
+        ZStack {
+            if let level {
+                ChargeRing(percent: level.percent, charging: false, size: 24)
+            }
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 24, height: 24)
+    }
+}
+
+// MARK: - Фокус
+
+private struct FocusEvent: View {
+    var transition: FocusTimer.Transition
+    var model: IslandModel
+    @ViewState private var appeared = false
+
+    private var title: String {
+        switch transition {
+        case .workFinished(let next, _): return next == .longBreak ? "Длинный перерыв · 15 мин" : "Перерыв · 5 мин"
+        case .breakFinished: return "Перерыв окончен"
+        }
+    }
+
+    private var subtitle: String {
+        switch transition {
+        case .workFinished(_, let held):
+            let done = "Подходов сегодня: \(model.focus.completedToday)"
+            return held > 0 ? "\(done) · ждут уведомления: \(held)" : done
+        case .breakFinished: return "Готовы к следующему подходу?"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: transition == .breakFinished ? "timer" : "cup.and.saucer.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(transition == .breakFinished ? Color.red.gradient : Color.green.gradient))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(subtitle).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            switch transition {
+            case .workFinished:
+                CardButton(title: "Пропустить") {
+                    model.focus.skip()
+                    model.dismissEvent()
+                }
+            case .breakFinished:
+                CardButton(title: "Начать фокус", systemImage: "play.fill", prominent: true) {
+                    model.startFocus(taskID: model.focus.taskID, title: model.focus.taskTitle)
+                }
+            }
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : -4)
+        .onAppear { withAnimation(.easeOut(duration: 0.35).delay(0.12)) { appeared = true } }
     }
 }
 
@@ -39,15 +188,15 @@ struct EventView: View {
 
 private struct ReminderEvent: View {
     var reminder: Reminder
+    var model: IslandModel
     var onClose: () -> Void
     @ViewState private var appeared = false
 
     private var isCalendar: Bool { reminder.source == .calendar }
 
-    private var linkTitle: String {
-        guard isCalendar else { return "Открыть" }
+    private var isMeeting: Bool {
         let host = reminder.link?.host ?? ""
-        return ["zoom", "meet.google", "teams", "facetime", "telemost"].contains { host.contains($0) } ? "Подключиться" : "Открыть"
+        return ["zoom", "meet.google", "teams", "facetime", "telemost"].contains { host.contains($0) }
     }
 
     var body: some View {
@@ -63,26 +212,28 @@ private struct ReminderEvent: View {
                 Text(reminder.title)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
-                Text("Через \(reminder.minutesBefore) мин · \(reminder.date.formatted(date: .omitted, time: .shortened))")
+                Text(reminder.subtitle())
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.6))
                     .monospacedDigit()
+                    .lineLimit(1)
             }
             Spacer(minLength: 6)
-            if let link = reminder.link {
-                Button {
-                    NSWorkspace.shared.open(link)
-                    onClose()
-                } label: {
-                    Text(linkTitle)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 12)
-                        .frame(height: 26)
-                        .background(Capsule().fill(isCalendar ? Color.green : Color.white))
-                        .contentShape(Capsule())
+            HStack(spacing: 6) {
+                if let link = reminder.link {
+                    CardButton(title: isMeeting ? "Войти" : "Открыть",
+                               systemImage: isMeeting ? "video.fill" : "link",
+                               prominent: true, tint: isMeeting ? .green : .white) {
+                        NSWorkspace.shared.open(link)
+                        onClose()
+                    }
                 }
-                .buttonStyle(PressableStyle())
+                CardButton(title: "+5 мин") { model.snoozeReminder(reminder) }
+                    .help("Напомнить через 5 минут")
+                if reminder.taskID != nil {
+                    CardButton(title: "Готово", systemImage: "checkmark",
+                               prominent: reminder.link == nil) { model.completeReminder(reminder) }
+                }
             }
         }
         .opacity(appeared ? 1 : 0)

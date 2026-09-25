@@ -119,7 +119,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     }
 
     private func powerChanged() {
-        guard let info = BatteryInfo.read() else { return }
+        guard debugMac == nil, let info = BatteryInfo.read() else { return }
         mac = info
         if info.onAC && wasOnAC == false { onChargerConnected?(info) }
         wasOnAC = info.onAC

@@ -44,7 +44,7 @@ enum Snapshots {
 
         model.clipboard.add(text: "git commit -m fix", bundleID: "com.apple.Terminal", appName: "Терминал")
         model.clipboard.add(text: "Привет! Сделай мне остров в вырезе", bundleID: "com.anthropic.claudefordesktop", appName: "Claude")
-        model.clipboard.add(text: "https://music.yandex.ru", bundleID: "com.google.Chrome", appName: "Google Chrome")
+        model.clipboard.add(text: "https://developer.apple.com/swiftui", bundleID: "com.google.Chrome", appName: "Google Chrome")
         model.clipboard.add(text: "Вторая строка из Claude", bundleID: "com.anthropic.claudefordesktop", appName: "Claude")
         model.clipPeek = nil; model.peek = false
 
@@ -53,23 +53,29 @@ enum Snapshots {
         model.peek = true; shot("2-peek"); model.peek = false
         model.hud = HUDState(kind: .volume, value: 0.6); shot("3-hud"); model.hud = nil
         model.eventExpanded = true; model.event = .charging(BatteryInfo(percent: 82, charging: true, onAC: true)); shot("7-charging")
-        model.event = .device(DeviceBattery(name: "AirPods Pro (Alexander)", symbol: "airpodspro", levels: [
+        let pods = DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
+            .init(label: "Левый", symbol: "airpod.left", percent: 100),
+            .init(label: "Правый", symbol: "airpod.right", percent: 100),
+            .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 34)])
+        model.event = .device(pods); shot("8-airpods-compact")
+        model.event = .deviceSheet(DeviceBattery(name: "AirPods Pro (Имя)", symbol: "airpodspro", levels: [
             .init(label: "Левый", symbol: "airpod.left", percent: 100, charging: true),
             .init(label: "Правый", symbol: "airpod.right", percent: 100, charging: true),
             .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 20)])); shot("8-airpods")
-        model.event = .device(DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
+        model.event = .deviceSheet(DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
             .init(label: "Левый", symbol: "airpod.left", percent: 100),
             .init(label: "Правый", symbol: "airpod.right", percent: 64),
             .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 40)])); shot("8-airpods-split")
-        model.event = .device(DeviceBattery(name: "AirPods Max", symbol: "airpodsmax", levels: [
+        model.event = .deviceSheet(DeviceBattery(name: "AirPods Max", symbol: "airpodsmax", levels: [
             .init(label: "", symbol: "", percent: 64)])); shot("9-max")
         model.event = .notification(AppNotification(id: "1", bundleID: "ru.keepcoder.Telegram", title: "Мама",
                                                     subtitle: "", body: "Ты сегодня приедешь на ужин? Я приготовлю твой любимый пирог 🥧",
                                                     date: Date())); shot("10-notification")
         model.event = .reminder(Reminder(id: "r", title: "Немецкий — урок 12", date: Date().addingTimeInterval(600),
-                                         minutesBefore: 10, source: .task, link: URL(string: "https://zoom.us/j/123"))); shot("10-reminder")
+                                         minutesBefore: 10, source: .task, link: URL(string: "https://zoom.us/j/123"), taskID: UUID())); shot("10-reminder")
         model.event = .reminder(Reminder(id: "c", title: "Созвон с командой", date: Date().addingTimeInterval(300),
                                          minutesBefore: 5, source: .calendar, link: URL(string: "https://meet.google.com/abc"))); shot("10-reminder-calendar")
+        model.event = .focus(.workFinished(next: .shortBreak, heldNotifications: 3)); shot("12-focus-event")
         model.event = nil
         model.batteries.debugSet(devices: [
             DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
@@ -87,7 +93,7 @@ enum Snapshots {
             TaskItem(text: "Купить продукты"),
             TaskItem(text: "Сдать эссе", time: "12:00", day: TasksStore.date(forOffset: 1)),
             TaskItem(text: "Ответить на письма", done: true)])
-        let tasksHost = NSHostingView(rootView: TasksView(store: model.tasks, gemini: model.gemini)
+        let tasksHost = NSHostingView(rootView: TasksView(store: model.tasks, gemini: model.gemini, focus: model.focus)
             .frame(width: 596, height: 118).padding(20).background(Color.black).preferredColorScheme(.dark))
         tasksHost.frame = NSRect(x: 0, y: 0, width: 636, height: 158)
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
@@ -96,7 +102,7 @@ enum Snapshots {
             try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("11-tasks.png"))
         }
         SnapshotFlags.openedTask = model.tasks.items[1].id
-        let detailHost = NSHostingView(rootView: TasksView(store: model.tasks, gemini: model.gemini)
+        let detailHost = NSHostingView(rootView: TasksView(store: model.tasks, gemini: model.gemini, focus: model.focus)
             .frame(width: 596, height: 118).padding(20).background(Color.black).preferredColorScheme(.dark))
         detailHost.frame = NSRect(x: 0, y: 0, width: 636, height: 158)
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
@@ -132,6 +138,10 @@ enum Snapshots {
         for tab in IslandTab.allCases { model.tab = tab; shot("4-\(tab.rawValue)") }
         SnapshotFlags.notesMode = .tasks
         model.tab = .home; model.tab = .notes; shot("4-notes-tasks")
+        SnapshotFlags.notesMode = .vault
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .notes; shot("4-notes-vault")
+        SnapshotFlags.notesMode = .clipboard
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .notes; shot("4-notes-clipboard")
         SnapshotFlags.notesMode = .notes
         SnapshotFlags.batteryPage = 1
         model.tab = .music; model.tab = .home; shot("4-home-airpods")
@@ -142,5 +152,8 @@ enum Snapshots {
         model.media.debugSet(title: "", artist: "", album: "", duration: 0, elapsed: 0, playing: false, artwork: nil, bundleID: nil)
         model.tab = .music; shot("5-empty")
         model.tab = .home; shot("5-home-no-music")
+        model.focus.debugSet(phase: .work, remaining: 18 * 60 + 42, title: "Немецкий", completed: 2)
+        model.tab = .music; model.tab = .home; shot("12-focus-home")
+        model.isExpanded = false; model.expandedContentVisible = false; shot("12-focus-compact")
     }
 }

@@ -13,15 +13,20 @@
   <img src="docs/screenshots/4-home.png" width="720" alt="Home">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/12-focus-compact.png" width="420" alt="Focus timer in the collapsed island">
+</p>
+
 ## Features
 
 | | |
 |---|---|
-| **Home** — clock, mini player, weather and a swipeable battery card: MacBook, AirPods (left / right / case), Magic Mouse, iPhone. | <img src="docs/screenshots/4-home.png" width="360"> |
-| **Music** — artwork with a glow sampled from the cover, scrubbing, repeat-one, quick switch between Apple Music, Spotify and YouTube Music. Live activity with an equalizer in the collapsed island. | <img src="docs/screenshots/4-music.png" width="360"> |
+| **Home** — clock, mini player, weather and a swipeable battery card: MacBook, AirPods (left / right / case), Magic Mouse, iPhone. When nothing is playing: a day summary (“4 tasks · 17:00 Gym”) and a one-click focus button. | <img src="docs/screenshots/5-home-no-music.png" width="360"> |
+| **Pomodoro focus** — 25 min work, 5 min break, a long break after every fourth round. Start it from Home or from any task; the collapsed island shows a progress ring and a countdown, and notifications stay quiet until the break. | <img src="docs/screenshots/12-focus-home.png" width="360"><br><img src="docs/screenshots/12-focus-compact.png" width="360"> |
 | **Tasks** — a one-week planner (Today, Tomorrow, …) with swipe between days, times, descriptions with clickable links, and a Gemini assistant that turns “gym at 5, call at 10” into tasks. | <img src="docs/screenshots/4-notes-tasks.png" width="360"> |
-| **Reminders** — 10 and 5 minutes before a timed task or a calendar event, a card drops out of the notch with a soft synthesized chime and a *Join* button for Zoom / Meet / Teams links. | <img src="docs/screenshots/10-reminder.png" width="360"> |
-| **AirPods** — an iOS-style connection sheet with charge rings for the earbuds and the case; AirPods Max supported. | <img src="docs/screenshots/8-airpods.png" width="360"> |
+| **Reminders** — 10 and 5 minutes before and exactly at the start of a timed task or calendar event, a card drops out of the notch with a soft synthesized chime. *Join* opens Zoom / Meet / Teams links, *+5 min* snoozes, *Done* checks the task off. | <img src="docs/screenshots/10-reminder.png" width="360"> |
+| **AirPods** — on connect, the island shows the earbuds and the case with charge rings, like on iPhone; click for the full sheet. AirPods Max supported. | <img src="docs/screenshots/8-airpods-compact.png" width="360"><br><img src="docs/screenshots/8-airpods.png" width="360"> |
+| **Music** — artwork with a glow sampled from the cover, scrubbing, repeat-one, quick switch between Apple Music, Spotify and YouTube Music. Live activity with an equalizer in the collapsed island. | <img src="docs/screenshots/4-music.png" width="360"> |
 | **Controls** — volume, brightness and a **per-app volume mixer** built on Core Audio process taps. | <img src="docs/screenshots/4-controls.png" width="360"> |
 | **Files** — a shelf to drop files on and drag them out again (AirDrop, Reveal in Finder, Copy Path). | <img src="docs/screenshots/4-shelf.png" width="360"> |
 
@@ -38,13 +43,7 @@ Also: rich-text notes, clipboard history, a Touch ID–protected API key vault, 
 
 ## Privacy
 
-Everything stays on your Mac.
-
-- Tasks, notes, clipboard history and the file shelf are stored in `~/Library/Application Support/Notchly/`.
-- Secrets (Gmail app password, Gemini API key, API vault) live only in the macOS Keychain; the vault is additionally locked behind Touch ID.
-- Gmail and Gemini are optional and talk directly to Google — there is no server of our own.
-- The Notification Center database is opened read-only; “deleting” a notification only hides it inside Notchly.
-- Password-manager and concealed clipboard types are never recorded.
+Everything stays on your Mac: no server, no analytics, no telemetry. Secrets live only in the Keychain, the API vault is behind Touch ID, the clipboard skips password-manager entries, and notifications are read read-only. Details, screenshots and a full list of network calls: **[PRIVACY.md](PRIVACY.md)**.
 
 ## Requirements
 
@@ -87,7 +86,7 @@ Sources/Notchly/
   App.swift, IslandModel.swift, NotchWindowController.swift   app entry, state machine, panel & mouse
   MediaController.swift, ScriptablePlayers.swift              now playing
   AppAudioMixer.swift, SystemControls.swift                   audio / brightness
-  Reminders.swift                                             reminders, calendar, synthesized chime
+  Reminders.swift, Focus.swift                                reminders, calendar, chime, Pomodoro timer
   GmailClient.swift, SystemNotifications.swift, GeminiAssistant.swift
   Views/                                                      SwiftUI views
 MediaAdapter/                                                 dylib loaded into /usr/bin/perl
@@ -96,8 +95,6 @@ scripts/                                                      signing and icon g
 
 ## Roadmap
 
-- Focus timer bound to a task, with notifications held back during a session
-- “Snooze” and “Done” buttons on reminder cards
 - Ask Gemini about selected text with a global shortcut
 - Spaced-repetition cards generated from a PDF dropped on the island
 

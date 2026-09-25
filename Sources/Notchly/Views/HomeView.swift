@@ -9,7 +9,8 @@ struct HomeView: View {
 
     var body: some View {
         HStack(spacing: 18) {
-            clock
+            HomeLeftColumn(model: model, media: media, focus: model.focus, tasks: model.tasks,
+                           calendar: model.reminders.calendar, openMusic: openMusic)
                 .frame(width: 200)
                 .staggered(0)
 
@@ -29,6 +30,25 @@ struct HomeView: View {
         .onAppear { batteries.refresh() }
     }
 
+}
+
+/// Левая колонка главной: часы, а во время фокуса — таймер «Помидора».
+/// Без музыки под часами — сводка дня и кнопка фокуса.
+private struct HomeLeftColumn: View {
+    var model: IslandModel
+    @ObservedObject var media: MediaController
+    @ObservedObject var focus: FocusTimer
+    @ObservedObject var tasks: TasksStore
+    @ObservedObject var calendar: CalendarService
+    var openMusic: () -> Void
+
+    var body: some View {
+        Group {
+            if focus.isActive { focusPanel.transition(.opacity) } else { clock.transition(.opacity) }
+        }
+        .animation(.easeInOut(duration: 0.25), value: focus.isActive)
+    }
+
     private var clock: some View {
         TimelineView(.everyMinute) { ctx in
             VStack(alignment: .center, spacing: 2) {
@@ -42,13 +62,119 @@ struct HomeView: View {
                 Text(ctx.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "ru_RU"))).capitalizedFirst)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
-                Spacer(minLength: media.hasTrack ? 6 : 0)
-                nowPlayingChip
+                if media.hasTrack {
+                    Spacer(minLength: 6)
+                    nowPlayingChip
+                } else {
+                    daySummary(now: ctx.date)
+                        .padding(.top, 8)
+                    focusButton
+                        .padding(.top, 6)
+                    Spacer(minLength: 0)
+                }
             }
             .padding(.top, 0)
             .padding(.bottom, 2)
             .animation(.spring(response: 0.45, dampingFraction: 0.9), value: media.hasTrack)
         }
+    }
+
+    /// «3 задачи · 17:00 Спортзал» — ближайшая задача или встреча на сегодня.
+    private func daySummary(now: Date) -> some View {
+        let open = tasks.tasks(forOffset: 0).filter { !$0.done }
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        let nowText = f.string(from: now)
+        var next: (time: String, title: String)? = open
+            .compactMap { task in task.time.map { ($0, task.text) } }
+            .first { $0.0 >= nowText }
+        if let event = calendar.upcoming.first(where: { $0.start > now && Calendar.current.isDateInToday($0.start) }) {
+            let time = f.string(from: event.start)
+            if next == nil || time < next!.time { next = (time, event.title) }
+        }
+        let count = open.count
+        let head = count == 0 ? "Задач на сегодня нет" : "\(count) \(Self.plural(count))"
+        return HStack(spacing: 4) {
+            Text(head)
+            if let next {
+                Text("·")
+                Text(next.time).monospacedDigit().foregroundStyle(.white.opacity(0.8))
+                Text(next.title).lineLimit(1)
+            }
+        }
+        .font(.system(size: 11.5, weight: .medium))
+        .foregroundStyle(.white.opacity(0.5))
+        .lineLimit(1)
+        .frame(maxWidth: 196)
+    }
+
+    private static func plural(_ n: Int) -> String {
+        let mod10 = n % 10, mod100 = n % 100
+        if mod10 == 1 && mod100 != 11 { return "задача" }
+        if (2...4).contains(mod10) && !(12...14).contains(mod100) { return "задачи" }
+        return "задач"
+    }
+
+    private var focusButton: some View {
+        Button { model.startFocus() } label: {
+            Label("Фокус · 25 мин", systemImage: "timer")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.horizontal, 11)
+                .frame(height: 24)
+                .background(Capsule().fill(.white.opacity(0.1)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .help("Помидор: 25 минут работы, потом перерыв")
+    }
+
+    /// Таймер «Помидора»: крупный отсчёт и кнопки пауза / пропустить / стоп.
+    private var focusPanel: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            VStack(spacing: 4) {
+                Spacer(minLength: 0)
+                HStack(spacing: 5) {
+                    Circle().fill(FocusCompactView.tint(for: focus.phase)).frame(width: 6, height: 6)
+                    Text(focus.taskTitle.map { "\(focus.phase.title) · \($0)" } ?? focus.phase.title)
+                        .lineLimit(1)
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(maxWidth: 196)
+                Text(focus.remaining(at: ctx.date).clock)
+                    .font(.system(size: 44, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(focus.isPaused ? .white.opacity(0.5) : .white)
+                HStack(spacing: 10) {
+                    control(focus.isPaused ? "play.fill" : "pause.fill", help: focus.isPaused ? "Продолжить" : "Пауза") {
+                        focus.togglePause()
+                    }
+                    control("forward.end.fill", help: focus.phase.isBreak ? "Закончить перерыв" : "К перерыву") {
+                        focus.skip()
+                    }
+                    control("stop.fill", help: "Остановить") { focus.stop() }
+                }
+                Text("Подходов сегодня: \(focus.completedToday)")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .padding(.top, 2)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func control(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 26)
+                .background(Capsule().fill(.white.opacity(0.12)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .help(help)
     }
 
     @ViewBuilder

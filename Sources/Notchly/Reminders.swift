@@ -11,6 +11,16 @@ struct Reminder: Equatable {
     var source: Source
     /// Ссылка на созвон или на урок из описания задачи.
     var link: URL?
+    /// Задача, к которой относится напоминание (для кнопки «Готово»).
+    var taskID: UUID?
+
+    /// «Через 10 мин · 17:00» или «Начинается сейчас · 17:00».
+    func subtitle(now: Date = Date()) -> String {
+        let minutes = Int((date.timeIntervalSince(now) / 60).rounded())
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if minutes >= 1 { return "Через \(minutes) мин · \(time)" }
+        return minutes > -2 ? "Начинается сейчас · \(time)" : "Началось в \(time)"
+    }
 }
 
 /// Тихий приятный сигнал: короткий «бульк» и следом мягкий колокольчик.
@@ -140,16 +150,18 @@ final class CalendarService: ObservableObject {
     }
 }
 
-/// Напоминает о задачах со временем и о событиях календаря за 10 и за 5 минут.
+/// Напоминает о задачах со временем и о событиях календаря за 10 и за 5 минут и в момент начала.
 /// Время берётся с часов Mac; уже показанные напоминания запоминаются, чтобы не повторяться.
 final class ReminderCenter {
-    static let offsets = [10, 5]
+    static let offsets = [10, 5, 0]
 
     var onFire: ((Reminder) -> Void)?
     let calendar = CalendarService()
     private let tasks: TasksStore
     private var timer: Timer?
     private var fired: [String: Date]
+    /// Отложенные напоминания: покажутся снова в указанное время.
+    private var snoozed: [(reminder: Reminder, at: Date)] = []
     private let firedKey = "reminders.fired"
 
     init(tasks: TasksStore) {
@@ -181,12 +193,25 @@ final class ReminderCenter {
             guard parts.count == 2,
                   let date = cal.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: now) else { return nil }
             return Reminder(id: "task-\(task.id.uuidString)-\(time)", title: task.text, date: date,
-                            minutesBefore: 0, source: .task, link: task.links.first)
+                            minutesBefore: 0, source: .task, link: task.links.first, taskID: task.id)
         }
+    }
+
+    /// «Отложить»: напомнить ещё раз через 5 минут.
+    func snooze(_ reminder: Reminder, minutes: Double = 5) {
+        snoozed.removeAll { $0.reminder.id == reminder.id }
+        snoozed.append((reminder, Date().addingTimeInterval(minutes * 60)))
     }
 
     private func check() {
         let now = Date()
+        let due = snoozed.filter { $0.at <= now }
+        snoozed.removeAll { $0.at <= now }
+        for item in due {
+            // Задачу могли уже выполнить, пока напоминание было отложено.
+            if let id = item.reminder.taskID, tasks.items.first(where: { $0.id == id })?.done != false { continue }
+            onFire?(item.reminder)
+        }
         let candidates = taskCandidates(now: now) + calendar.upcoming.map {
             Reminder(id: "cal-\($0.id)", title: $0.title, date: $0.start, minutesBefore: 0, source: .calendar, link: $0.link)
         }

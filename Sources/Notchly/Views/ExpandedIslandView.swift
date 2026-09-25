@@ -78,7 +78,7 @@ struct ExpandedIslandView: View {
         case .music: MusicPlayerView(media: media)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
         case .notes: NotesView(store: model.notes, clipboard: model.clipboard, vault: model.vault,
-                                     tasks: model.tasks, gemini: model.gemini)
+                                     tasks: model.tasks, gemini: model.gemini, focus: model.focus)
         case .notifications: NotificationsView(gmail: model.gmail, system: model.systemNotifications)
         case .controls: ControlsView(volume: model.volume, brightness: model.brightness, mixer: model.mixer)
         }

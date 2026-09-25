@@ -49,55 +49,41 @@ let image = NSImage(size: NSSize(width: side, height: side), flipped: true) { _ 
     NSGraphicsContext.saveGraphicsState()
     squircle.addClip()
 
-    // Обои экрана.
-    NSGradient(colors: [color(0x2b3f94), color(0x6a44aa), color(0x160f33)],
-               atLocations: [0, 0.55, 1], colorSpace: .sRGB)!.draw(in: tile, angle: -55)
-    // Мягкие цветные пятна.
-    for (center, hex, radius) in [(NSPoint(x: 260, y: 820), UInt32(0xff5fa2), CGFloat(360)),
-                                  (NSPoint(x: 820, y: 640), UInt32(0x4fd1ff), CGFloat(300))] {
-        NSGradient(colors: [color(hex, 0.45), color(hex, 0)])!
-            .draw(fromCenter: center, radius: 0, toCenter: center, radius: radius, options: [])
-    }
+    // Монохромный фон: мягкий светло-серый градиент.
+    NSGradient(colors: [color(0xfbfbfd), color(0xe4e4e9), color(0xcfcfd6)],
+               atLocations: [0, 0.6, 1], colorSpace: .sRGB)!.draw(in: tile, angle: 90)
 
-    // Чёрная рамка экрана сверху.
-    color(0x000000).setFill()
-    NSRect(x: tile.minX, y: tile.minY, width: tile.width, height: 64).fill()
-
-    // Остров, свисающий из выреза, — с мягкой тенью.
-    let island = roundedRect(NSRect(x: 232, y: 100, width: 560, height: 318), top: 0, bottom: 128)
+    // Сам «остров» — чёрная капсула с мягкой тенью.
+    let pill = NSBezierPath(roundedRect: NSRect(x: 222, y: 400, width: 580, height: 176), xRadius: 88, yRadius: 88)
     NSGraphicsContext.saveGraphicsState()
-    let islandShadow = NSShadow()
-    islandShadow.shadowColor = .black.withAlphaComponent(0.55)
-    islandShadow.shadowBlurRadius = 40
-    islandShadow.shadowOffset = NSSize(width: 0, height: 18)
-    islandShadow.set()
+    let pillShadow = NSShadow()
+    pillShadow.shadowColor = .black.withAlphaComponent(0.35)
+    pillShadow.shadowBlurRadius = 36
+    pillShadow.shadowOffset = NSSize(width: 0, height: 20)
+    pillShadow.set()
     color(0x000000).setFill()
-    island.fill()
+    pill.fill()
     NSGraphicsContext.restoreGraphicsState()
 
-    // Обложка.
-    let art = NSBezierPath(roundedRect: NSRect(x: 300, y: 176, width: 148, height: 148), xRadius: 34, yRadius: 34)
-    NSGradient(colors: [color(0xff9f43), color(0xff4f8b), color(0x9b5cff)])!.draw(in: art, angle: -45)
+    // Едва заметный блик по верхней кромке капсулы.
+    NSGraphicsContext.saveGraphicsState()
+    pill.addClip()
+    NSGradient(colors: [color(0xffffff, 0.10), color(0xffffff, 0)])!
+        .draw(in: NSRect(x: 222, y: 400, width: 580, height: 60), angle: 90)
+    NSGraphicsContext.restoreGraphicsState()
 
-    // Эквалайзер.
-    let bars: [CGFloat] = [70, 128, 92, 150, 104]
-    for (i, h) in bars.enumerated() {
-        let x = 492 + CGFloat(i) * 48
-        let bar = NSBezierPath(roundedRect: NSRect(x: x, y: 324 - h, width: 28, height: h), xRadius: 14, yRadius: 14)
-        color(0xffffff).setFill()
-        bar.fill()
-    }
+    // Глазок камеры справа.
+    let lens = NSRect(x: 690, y: 456, width: 64, height: 64)
+    NSGradient(colors: [color(0x2a2a2e), color(0x0b0b0d)])!.draw(in: NSBezierPath(ovalIn: lens), angle: -90)
+    NSGradient(colors: [color(0x3a3a40), color(0x121214)])!
+        .draw(in: NSBezierPath(ovalIn: lens.insetBy(dx: 16, dy: 16)), angle: -90)
+    color(0xffffff, 0.35).setFill()
+    NSBezierPath(ovalIn: NSRect(x: lens.minX + 22, y: lens.minY + 20, width: 9, height: 9)).fill()
 
-    // Полоса прогресса.
-    NSBezierPath(roundedRect: NSRect(x: 300, y: 356, width: 424, height: 14), xRadius: 7, yRadius: 7).addClip()
-    color(0xffffff, 0.22).setFill()
-    NSRect(x: 300, y: 356, width: 424, height: 14).fill()
-    color(0xffffff, 0.9).setFill()
-    NSRect(x: 300, y: 356, width: 250, height: 14).fill()
     NSGraphicsContext.restoreGraphicsState()
 
     // Тонкая светлая кромка.
-    color(0xffffff, 0.08).setStroke()
+    color(0x000000, 0.08).setStroke()
     squircle.lineWidth = 3
     squircle.stroke()
     return true

@@ -35,25 +35,33 @@ enum IslandTab: String, CaseIterable, Identifiable {
 /// Всплывающие события в стиле iPhone: подключили зарядку или наушники.
 enum IslandEvent: Equatable {
     case charging(BatteryInfo)
+    /// Наушники подключились: компактно, как на iPhone — значки с кольцами заряда по бокам выреза.
     case device(DeviceBattery)
+    /// Подробное окно наушников (по нажатию на компактное).
+    case deviceSheet(DeviceBattery)
     case notification(AppNotification)
     case reminder(Reminder)
+    case focus(FocusTimer.Transition)
 
-    var isDevice: Bool { if case .device = self { return true } else { return false } }
+    /// Окно, которое не закрывается по нажатию (в нём свои кнопки).
+    var isDevice: Bool { if case .deviceSheet = self { return true } else { return false } }
+    /// Компактное событие по бокам выреза — без «капли».
+    var isCompact: Bool { if case .device = self { return true } else { return false } }
 
     var size: CGSize {
         switch self {
         case .charging: return IslandMetrics.eventSize
-        case .device: return IslandMetrics.deviceSheetSize
+        case .device: return .zero
+        case .deviceSheet: return IslandMetrics.deviceSheetSize
         case .notification: return IslandMetrics.notificationSize
-        case .reminder: return IslandMetrics.reminderSize
+        case .reminder, .focus: return IslandMetrics.reminderSize
         }
     }
 
     /// Уведомления и напоминания ждут в очереди, пока показана другая карточка.
     var isQueued: Bool {
         switch self {
-        case .notification, .reminder: return true
+        case .notification, .reminder, .focus: return true
         default: return false
         }
     }
@@ -61,17 +69,19 @@ enum IslandEvent: Equatable {
     var bottomRadius: CGFloat {
         switch self {
         case .charging: return 32
-        case .device: return 42
-        case .notification, .reminder: return 28
+        case .device: return 14
+        case .deviceSheet: return 42
+        case .notification, .reminder, .focus: return 28
         }
     }
 
     var duration: TimeInterval {
         switch self {
         case .charging: return 4.5
-        case .device: return 8
+        case .device: return 4
+        case .deviceSheet: return 10
         case .notification: return 4
-        case .reminder: return 8
+        case .reminder, .focus: return 8
         }
     }
 }
@@ -93,7 +103,8 @@ enum IslandMetrics {
     static let eventSize = CGSize(width: 440, height: 118)
     static let deviceSheetSize = CGSize(width: 380, height: 236)
     static let notificationSize = CGSize(width: 430, height: 76)
-    static let reminderSize = CGSize(width: 430, height: 80)
+    static let reminderSize = CGSize(width: 520, height: 80)
+    static let focusWing: CGFloat = 56
     /// Запас окна вокруг острова, чтобы тень и пружинная анимация не обрезались.
     static let windowSize = CGSize(width: 760, height: 320)
     static let spring = Animation.spring(response: 0.46, dampingFraction: 0.84)
@@ -157,6 +168,7 @@ final class IslandModel: ObservableObject {
     let gmail = GmailClient()
     let systemNotifications = SystemNotificationsReader()
     let reminders: ReminderCenter
+    let focus = FocusTimer()
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
@@ -177,13 +189,22 @@ final class IslandModel: ObservableObject {
         clipboard.onCopy = { [weak self] group in self?.showClipPeek(group) }
         batteries.onChargerConnected = { [weak self] info in self?.showEvent(.charging(info)) }
         batteries.onAudioDeviceConnected = { [weak self] device in self?.showEvent(.device(device)) }
-        systemNotifications.onNew = { [weak self] item in self?.showEvent(.notification(item)) }
+        systemNotifications.onNew = { [weak self] item in self?.showNotification(item) }
         reminders.onFire = { [weak self] reminder in self?.presentReminder(reminder) }
+        focus.onTransition = { [weak self] transition in
+            SoftChime.play()
+            self?.presentWhenCollapsed(.focus(transition))
+        }
+        // Таймер фокуса меняет форму свёрнутого острова.
+        focus.$phase
+            .removeDuplicates()
+            .sink { [weak self] _ in DispatchQueue.main.async { withAnimation(IslandMetrics.softSpring) { self?.objectWillChange.send() } } }
+            .store(in: &bag)
         if persistent { reminders.start() }
         gmail.onNew = { [weak self] mail in
-            self?.showEvent(.notification(AppNotification(
+            self?.showNotification(AppNotification(
                 id: "gmail-\(mail.id)", bundleID: AppNotification.gmailID, title: mail.senderName,
-                subtitle: "", body: mail.subject, date: mail.date)))
+                subtitle: "", body: mail.subject, date: mail.date))
         }
 
         volume.onExternalChange = { [weak self] value, muted in
@@ -207,7 +228,10 @@ final class IslandModel: ObservableObject {
 
     var bottomRadius: CGFloat {
         if isExpanded { return 34 }
-        if let event { return eventExpanded ? event.bottomRadius : 22 }
+        if let event {
+            if event.isCompact { return hasPhysicalNotch ? 11 : 14 }
+            return eventExpanded ? event.bottomRadius : 22
+        }
         if peek && media.hasTrack { return 20 }
         return hasPhysicalNotch ? 11 : 14
     }
@@ -219,6 +243,9 @@ final class IslandModel: ObservableObject {
             return CGSize(width: IslandMetrics.expandedWidth, height: n.height + IslandMetrics.expandedContentHeight)
         }
         if let event {
+            if event.isCompact {
+                return CGSize(width: n.width + IslandMetrics.hudWing * 2, height: n.height)
+            }
             if !eventExpanded {
                 return CGSize(width: n.width + 18, height: n.height + 24)
             }
@@ -230,6 +257,9 @@ final class IslandModel: ObservableObject {
         }
         if peek && media.hasTrack {
             return CGSize(width: n.width + IslandMetrics.peekWing * 2, height: n.height + IslandMetrics.peekExtraHeight)
+        }
+        if focus.isActive {
+            return CGSize(width: n.width + IslandMetrics.focusWing * 2, height: n.height)
         }
         if media.showsLiveActivity {
             return CGSize(width: n.width + IslandMetrics.compactWing * 2, height: n.height)
@@ -312,6 +342,18 @@ final class IslandModel: ObservableObject {
         }
         eventTask?.cancel()
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        if event.isCompact {
+            // Компактное событие просто раздвигает остров в стороны, как HUD громкости.
+            withAnimation(IslandMetrics.spring) {
+                hud = nil
+                peek = false
+                clipPeek = nil
+                self.event = event
+                eventExpanded = true
+            }
+            scheduleEventDismiss(after: event.duration)
+            return
+        }
         // «Капля»: сначала узкая капля выпадает из выреза…
         eventExpanded = false
         withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
@@ -329,13 +371,47 @@ final class IslandModel: ObservableObject {
     }
 
     /// Напоминание звучит сразу; если остров сейчас открыт, карточка покажется, как только он закроется.
-    private func presentReminder(_ reminder: Reminder, attempt: Int = 0) {
-        if attempt == 0 { SoftChime.play() }
-        guard isExpanded else { return showEvent(.reminder(reminder)) }
+    private func presentReminder(_ reminder: Reminder) {
+        SoftChime.play()
+        presentWhenCollapsed(.reminder(reminder))
+    }
+
+    private func presentWhenCollapsed(_ event: IslandEvent, attempt: Int = 0) {
+        guard isExpanded else { return showEvent(event) }
         guard attempt < 150 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.presentReminder(reminder, attempt: attempt + 1)
+            self?.presentWhenCollapsed(event, attempt: attempt + 1)
         }
+    }
+
+    /// Во время фокуса уведомления приложений не всплывают — их число покажем в конце подхода.
+    private func showNotification(_ item: AppNotification) {
+        if focus.isFocusing { return focus.holdNotification() }
+        showEvent(.notification(item))
+    }
+
+    /// Нажали на компактное событие наушников — показываем подробное окно.
+    func showDeviceSheet(_ device: DeviceBattery) {
+        eventTask?.cancel()
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) { event = .deviceSheet(device) }
+        scheduleEventDismiss(after: IslandEvent.deviceSheet(device).duration)
+    }
+
+    // MARK: - Кнопки в карточках
+
+    func completeReminder(_ reminder: Reminder) {
+        if let id = reminder.taskID, tasks.items.first(where: { $0.id == id })?.done == false { tasks.toggle(id) }
+        dismissEvent()
+    }
+
+    func snoozeReminder(_ reminder: Reminder) {
+        reminders.snooze(reminder)
+        dismissEvent()
+    }
+
+    func startFocus(taskID: UUID? = nil, title: String? = nil) {
+        focus.start(taskID: taskID, title: title)
+        if event != nil { dismissEvent() }
     }
 
     private func scheduleEventDismiss(after delay: TimeInterval) {

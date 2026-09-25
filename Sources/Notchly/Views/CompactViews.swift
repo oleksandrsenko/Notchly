@@ -114,3 +114,41 @@ struct ClipPeekView: View {
         }
     }
 }
+
+/// Фокус в свёрнутом острове: слева кольцо прогресса, справа обратный отсчёт.
+struct FocusCompactView: View {
+    @ObservedObject var focus: FocusTimer
+    var notchWidth: CGFloat
+
+    static func tint(for phase: FocusTimer.Phase) -> Color {
+        phase.isBreak ? BatteryTint.color(100) : Color(hue: 0.02, saturation: 0.72, brightness: 0.88)
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let tint = Self.tint(for: focus.phase)
+            HStack(spacing: 0) {
+                ZStack {
+                    Circle().stroke(.white.opacity(0.15), lineWidth: 2.5)
+                    Circle()
+                        .trim(from: 0, to: focus.progress(at: context.date))
+                        .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: focus.progress(at: context.date))
+                    Image(systemName: focus.phase.isBreak ? "cup.and.saucer.fill" : "timer")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 20, height: 20)
+                .padding(.leading, 14)
+                Spacer(minLength: notchWidth)
+                Text(focus.remaining(at: context.date).clock)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(focus.isPaused ? .white.opacity(0.45) : .white)
+                    .padding(.trailing, 14)
+            }
+            .frame(maxHeight: .infinity)
+        }
+    }
+}

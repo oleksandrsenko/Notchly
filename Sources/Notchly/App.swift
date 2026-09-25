@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             tasks.add("Через 10 минут", time: f.string(from: Date().addingTimeInterval(10 * 60)))
             tasks.add("Через 5 минут", time: f.string(from: Date().addingTimeInterval(5 * 60)))
             tasks.add("Через 30 минут", time: f.string(from: Date().addingTimeInterval(30 * 60)))
+            tasks.add("Прямо сейчас", time: f.string(from: Date()))
             let center = ReminderCenter(tasks: tasks)
             var fired: [String] = []
             center.onFire = { fired.append("\($0.title) — за \($0.minutesBefore) мин") }

@@ -1,0 +1,71 @@
+# Privacy in Notchly
+
+Notchly lives in the most visible spot on your screen and touches personal things — notifications, clipboard, tasks, mail. It is built so that **none of it leaves your Mac** unless you explicitly turn on a service that needs the network.
+
+## At a glance
+
+| What | Where it lives | Who can see it |
+|---|---|---|
+| Tasks, notes, file shelf | `~/Library/Application Support/Notchly/*.json` | only you |
+| Clipboard history | `~/Library/Application Support/Notchly/clipboard.json` (owner-only file permissions), auto-expires | only you |
+| Gmail app password, Gemini API key | macOS Keychain | only Notchly, after macOS asks you |
+| API key vault | macOS Keychain, unlocked with Touch ID / Mac password, auto-locks after 2 minutes | only you |
+| App notifications | read-only from macOS Notification Center database | never copied or sent anywhere |
+| Calendar events | EventKit, in memory only | never stored or sent |
+
+There is **no server, no analytics, no telemetry, no crash reporting.**
+
+## Secrets never touch the disk in plain text
+
+<img src="docs/screenshots/4-notes-vault.png" width="640" alt="API key vault locked behind Touch ID">
+
+- The API key vault is locked by default. Opening it requires Touch ID or the Mac password (`LocalAuthentication`), and it locks itself again after two minutes or whenever the island closes.
+- Keys are stored as a single Keychain item, never in `UserDefaults` or files.
+- At launch Notchly only checks *whether* a key exists (Keychain attributes, no secret), so macOS never pops a Keychain prompt out of nowhere.
+
+## Clipboard history you control
+
+<img src="docs/screenshots/4-notes-clipboard.png" width="640" alt="Clipboard history grouped by app">
+
+- Entries marked as concealed or transient by password managers (`org.nspasteboard.ConcealedType`, 1Password, etc.) are **never recorded**.
+- History expires automatically; the retention period is set from the menu-bar menu, and *Clear* wipes it at once.
+- Each entry can be deleted individually.
+
+## Notifications: read-only, and quiet while you focus
+
+<img src="docs/screenshots/12-focus-event.png" width="640" alt="Focus session finished, 3 notifications held">
+
+- Notchly reads the Notification Center database **read-only** (this is why it asks for Full Disk Access). It never modifies the database; “deleting” a notification only hides it inside Notchly.
+- During a Pomodoro focus session, notification cards are held back. At the end you see a single count instead of a stream of distractions — the contents are never shown on screen while you work.
+
+## Network access — only what you turn on
+
+| Feature | Connects to | When |
+|---|---|---|
+| Weather | `api.open-meteo.com` (latitude/longitude only, no account) | at most every 10 min |
+| Approximate location | `ipapi.co` | only if Location access is not granted, to pick the weather city |
+| Gmail | `imap.gmail.com:993` over TLS, with an app password | only if you connect Gmail |
+| Gemini | `generativelanguage.googleapis.com` | only when you send a prompt |
+| Album art, app icons | `itunes.apple.com` search / lookup (track title + artist, or an app’s bundle ID) | only when the player’s artwork is too small or an icon is missing |
+
+Nothing else goes over the network.
+
+## Permissions and why they are needed
+
+| Permission | Used for | Without it |
+|---|---|---|
+| Accessibility | intercepting volume/brightness keys, keeping the menu bar from sliding over the island | system HUD is shown instead |
+| Full Disk Access | reading app notifications | only Gmail notifications |
+| Audio Capture | per-app volume mixer (Core Audio process taps; audio is only scaled, never recorded) | mixer is hidden |
+| Calendars | reminders before meetings | only task reminders |
+| Bluetooth | headphone battery | no headphone card |
+| Location | local weather | approximate location by IP (`ipapi.co`) |
+
+Every permission is optional; Notchly degrades gracefully.
+
+## Deleting your data
+
+1. Quit Notchly from the menu-bar icon.
+2. Delete `~/Library/Application Support/Notchly/`.
+3. In *Keychain Access*, search for `dev.notchly.app` and delete the items.
+4. Optionally reset preferences: `defaults delete dev.notchly.app`.

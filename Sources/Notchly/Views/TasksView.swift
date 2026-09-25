@@ -4,6 +4,7 @@ import SwiftUI
 struct TasksView: View {
     @ObservedObject var store: TasksStore
     @ObservedObject var gemini: GeminiAssistant
+    var focus: FocusTimer
     @ViewState private var draft = ""
     @FocusState private var draftFocused: Bool
     /// Задача, у которой открыто описание.
@@ -12,7 +13,7 @@ struct TasksView: View {
     var body: some View {
         ZStack {
             if let id = openedID, let task = store.items.first(where: { $0.id == id }) {
-                TaskDetailView(task: task, store: store) { close() }
+                TaskDetailView(task: task, store: store, focus: focus) { close() }
                     .transition(.opacity.combined(with: .offset(y: 10)))
             } else {
                 list.transition(.opacity.combined(with: .offset(y: -6)))
@@ -64,6 +65,7 @@ struct TasksView: View {
                         TaskRow(task: task) { store.toggle(task.id) } onDelete: { store.remove(task.id) }
                             onEdit: { store.update(task.id, text: $0) }
                             onOpen: { openedID = task.id }
+                            onFocus: { focus.start(taskID: task.id, title: task.text) }
                             .transition(.opacity.combined(with: .offset(y: -4)))
                     }
                 }
@@ -115,6 +117,7 @@ private struct TaskRow: View {
     var onDelete: () -> Void
     var onEdit: (String) -> Void
     var onOpen: () -> Void
+    var onFocus: () -> Void
     @ViewState private var hovering = false
     @ViewState private var editing = false
     @ViewState private var draft = ""
@@ -169,6 +172,19 @@ private struct TaskRow: View {
                     .help("Нажмите, чтобы исправить")
             }
             Spacer(minLength: 4)
+            // Таймер — начать фокус «Помидор» над этой задачей.
+            if !editing && hovering && !task.done {
+                Button(action: onFocus) {
+                    Image(systemName: "timer")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .help("Фокус 25 минут над этой задачей")
+                .transition(.opacity)
+            }
             // Стрелочка вниз — описание задачи. Если описание уже есть, она видна всегда.
             if !editing && (hovering || task.notes != nil) {
                 Button(action: onOpen) {
@@ -222,6 +238,7 @@ private struct TaskRow: View {
 private struct TaskDetailView: View {
     var task: TaskItem
     @ObservedObject var store: TasksStore
+    var focus: FocusTimer
     var onClose: () -> Void
     @ViewState private var notes: String?
 
@@ -255,6 +272,17 @@ private struct TaskDetailView: View {
                         .background(Capsule().fill(.white.opacity(0.08)))
                 }
                 Spacer(minLength: 6)
+                Button { focus.start(taskID: task.id, title: task.text) } label: {
+                    Label("Фокус", systemImage: "timer")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 9)
+                        .frame(height: 22)
+                        .background(Capsule().fill(.white.opacity(0.12)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                .help("Фокус 25 минут над этой задачей")
                 // Ссылки из описания — одним нажатием.
                 ForEach(Array(TaskItem.links(in: text).prefix(3).enumerated()), id: \.offset) { _, url in
                     Button { NSWorkspace.shared.open(url) } label: {
