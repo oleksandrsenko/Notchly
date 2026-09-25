@@ -74,9 +74,9 @@ struct IslandRootView: View {
                     insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .top)).animation(IslandMetrics.spring.delay(0.05)),
                     removal: .opacity.animation(.easeOut(duration: 0.12))))
         } else if let event = model.event {
-            EventView(event: event, notchHeight: model.notchSize.height)
+            EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
                 .contentShape(Rectangle())
-                .onTapGesture { model.dismissEvent() }
+                .onTapGesture { if !event.isDevice { model.dismissEvent() } }
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.85, anchor: .top)).animation(IslandMetrics.spring.delay(0.06)),
                     removal: .opacity.animation(.easeOut(duration: 0.15))))

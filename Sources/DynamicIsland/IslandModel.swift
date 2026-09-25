@@ -31,6 +31,8 @@ enum IslandTab: String, CaseIterable, Identifiable {
 enum IslandEvent: Equatable {
     case charging(BatteryInfo)
     case device(DeviceBattery)
+
+    var isDevice: Bool { if case .device = self { return true } else { return false } }
 }
 
 struct HUDState: Equatable {
@@ -48,6 +50,7 @@ enum IslandMetrics {
     static let peekWing: CGFloat = 56
     static let peekExtraHeight: CGFloat = 34
     static let eventSize = CGSize(width: 440, height: 118)
+    static let deviceSheetSize = CGSize(width: 380, height: 236)
     /// Запас окна вокруг острова, чтобы тень и пружинная анимация не обрезались.
     static let windowSize = CGSize(width: 760, height: 320)
     static let spring = Animation.spring(response: 0.42, dampingFraction: 0.78)
@@ -65,6 +68,8 @@ final class IslandModel: ObservableObject {
     /// Короткое уведомление «скопировано из …» по бокам выреза.
     @Published var clipPeek: ClipGroup?
     @Published var event: IslandEvent?
+    /// Пока курсор над карточкой события, она не закрывается сама.
+    var eventHovered = false
     @Published var notchSize = CGSize(width: 200, height: 32)
     @Published var hasPhysicalNotch = true
 
@@ -77,6 +82,7 @@ final class IslandModel: ObservableObject {
     let batteries = DeviceBatteryMonitor()
     let keys = MediaKeyInterceptor()
     let weather = WeatherService()
+    let keyboard = KeyboardLayoutMonitor()
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
@@ -113,7 +119,7 @@ final class IslandModel: ObservableObject {
 
     var bottomRadius: CGFloat {
         if isExpanded { return 34 }
-        if event != nil { return 32 }
+        if let event { return event.isDevice ? 42 : 32 }
         if peek && media.hasTrack { return 20 }
         return hasPhysicalNotch ? 11 : 14
     }
@@ -124,8 +130,9 @@ final class IslandModel: ObservableObject {
         if isExpanded {
             return CGSize(width: IslandMetrics.expandedWidth, height: n.height + IslandMetrics.expandedContentHeight)
         }
-        if event != nil {
-            return CGSize(width: IslandMetrics.eventSize.width, height: n.height + IslandMetrics.eventSize.height)
+        if let event {
+            let size = event.isDevice ? IslandMetrics.deviceSheetSize : IslandMetrics.eventSize
+            return CGSize(width: size.width, height: n.height + size.height)
         }
         if hud != nil || clipPeek != nil {
             return CGSize(width: n.width + IslandMetrics.hudWing * 2, height: n.height)
@@ -177,15 +184,22 @@ final class IslandModel: ObservableObject {
             clipPeek = nil
             self.event = event
         }
+        scheduleEventDismiss(after: event.isDevice ? 8 : 4.5)
+    }
+
+    private func scheduleEventDismiss(after delay: TimeInterval) {
         let task = DispatchWorkItem { [weak self] in
-            withAnimation(IslandMetrics.softSpring) { self?.event = nil }
+            guard let self else { return }
+            if self.eventHovered { return self.scheduleEventDismiss(after: 1) }
+            withAnimation(IslandMetrics.softSpring) { self.event = nil }
         }
         eventTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5, execute: task)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
     }
 
     func dismissEvent() {
         eventTask?.cancel()
+        eventHovered = false
         withAnimation(IslandMetrics.softSpring) { event = nil }
     }
 

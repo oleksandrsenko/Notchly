@@ -41,6 +41,8 @@ final class NotchWindowController {
         layout()
         panel.orderFrontRegardless()
         installMonitors()
+        // Без этого после программного перемещения курсора он «замирает» на четверть секунды.
+        CGEventSource(stateID: .combinedSessionState)?.localEventsSuppressionInterval = 0
         model.keys.start()
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -105,9 +107,20 @@ final class NotchWindowController {
     }
 
     private func handleMouse(dragging: Bool) {
+        preventMenuBarReveal()
         let location = NSEvent.mouseLocation
         guard screen.frame.contains(location) || islandRect().contains(location) else {
             scheduleCollapseIfNeeded()
+            return
+        }
+
+        // Пока показана карточка события, наведение не раскрывает остров — по ней можно кликать.
+        if model.event != nil {
+            let inside = islandRect().insetBy(dx: -6, dy: -6).contains(location)
+            model.eventHovered = inside
+            syncMouseEvents(inHotZone: inside)
+            expandWork?.cancel()
+            expandWork = nil
             return
         }
 
@@ -152,6 +165,20 @@ final class NotchWindowController {
         }
         expandWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.09, execute: work)
+    }
+
+    /// Строка меню (при автоскрытии или в полноэкранном режиме) выезжает, когда курсор касается
+    /// самого верхнего ряда пикселей. Над островом не даём курсору туда дойти — чуть опускаем его.
+    private func preventMenuBarReveal() {
+        guard NSEvent.pressedMouseButtons == 0 else { return }
+        let location = NSEvent.mouseLocation
+        let zone = islandRect().insetBy(dx: -12, dy: 0)
+        guard location.x >= zone.minX, location.x <= zone.maxX,
+              location.y >= screen.frame.maxY - 2, location.y <= screen.frame.maxY + 1 else { return }
+        // Координаты CoreGraphics отсчитываются от левого верхнего угла основного экрана.
+        let primaryTop = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
+        CGWarpMouseCursorPosition(CGPoint(x: location.x, y: primaryTop - (screen.frame.maxY - 4)))
+        CGAssociateMouseAndMouseCursorPosition(1)
     }
 
     private func scheduleCollapseIfNeeded() {

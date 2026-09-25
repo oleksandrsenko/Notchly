@@ -69,6 +69,8 @@ struct MusicPlayerView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
             }
+
+            ServiceColumn()
         }
     }
 }
@@ -121,30 +123,61 @@ private struct ProgressSection: View {
     }
 }
 
-/// Когда ничего не играет — быстрые кнопки запуска любимых сервисов.
-private struct EmptyPlayerView: View {
-    private struct Service: Identifiable {
-        var id: String { name }
-        var name: String
-        var bundleIDs: [String]
-        /// Bundle id iOS-версии: по нему иконка подтягивается из App Store, если приложения нет на Mac.
-        var storeBundleID: String?
-        var web: URL?
-        var fallbackSymbol: String
-    }
+/// Музыкальный сервис: открывает приложение, если оно установлено, иначе сайт.
+struct MusicService: Identifiable {
+    var id: String { name }
+    var name: String
+    var bundleIDs: [String]
+    /// Bundle id iOS-версии: по нему иконка подтягивается из App Store, если приложения нет на Mac.
+    var storeBundleID: String?
+    var web: URL
+    var fallbackSymbol: String
 
-    private let services = [
-        Service(name: "Apple Music", bundleIDs: ["com.apple.Music"], storeBundleID: nil, web: nil, fallbackSymbol: "music.note"),
-        Service(name: "Spotify", bundleIDs: ["com.spotify.client"], storeBundleID: "com.spotify.client",
-                web: URL(string: "https://open.spotify.com"), fallbackSymbol: "dot.radiowaves.left.and.right"),
-        Service(name: "Яндекс Музыка", bundleIDs: ["ru.yandex.desktop.music", "ru.yandex.music"],
-                storeBundleID: "ru.yandex.mobile.music",
-                web: URL(string: "https://music.yandex.ru"), fallbackSymbol: "headphones"),
-        Service(name: "YouTube Music", bundleIDs: ["com.github.th-ch.youtube-music", "com.github.th-ch.pear-desktop"],
-                storeBundleID: "com.google.ios.youtubemusic",
-                web: URL(string: "https://music.youtube.com"), fallbackSymbol: "play.rectangle.fill"),
+    static let all = [
+        MusicService(name: "Apple Music", bundleIDs: ["com.apple.Music"], storeBundleID: nil,
+                     web: URL(string: "https://music.apple.com")!, fallbackSymbol: "music.note"),
+        MusicService(name: "Spotify", bundleIDs: ["com.spotify.client"], storeBundleID: "com.spotify.client",
+                     web: URL(string: "https://open.spotify.com")!, fallbackSymbol: "dot.radiowaves.left.and.right"),
+        MusicService(name: "Яндекс Музыка", bundleIDs: ["ru.yandex.desktop.music", "ru.yandex.music"],
+                     storeBundleID: "ru.yandex.mobile.music",
+                     web: URL(string: "https://music.yandex.ru")!, fallbackSymbol: "headphones"),
+        MusicService(name: "YouTube Music", bundleIDs: ["com.github.th-ch.youtube-music", "com.github.th-ch.pear-desktop"],
+                     storeBundleID: "com.google.ios.youtubemusic",
+                     web: URL(string: "https://music.youtube.com")!, fallbackSymbol: "play.rectangle.fill"),
     ]
 
+    var appURL: URL? {
+        bundleIDs.lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }.first
+    }
+
+    var localIcon: NSImage? { appURL.map { NSWorkspace.shared.icon(forFile: $0.path) } }
+
+    func open() {
+        if let appURL {
+            NSWorkspace.shared.openApplication(at: appURL, configuration: .init())
+        } else {
+            NSWorkspace.shared.open(web)
+        }
+    }
+}
+
+/// Колонка быстрых ссылок справа от плеера.
+private struct ServiceColumn: View {
+    var body: some View {
+        VStack(spacing: 6) {
+            ForEach(MusicService.all) { service in
+                ServiceButton(service: service, iconSize: 26, showsName: false)
+                    .help(service.appURL == nil ? "Открыть \(service.name) в браузере" : "Открыть \(service.name)")
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 5)
+        .background(Capsule().fill(.white.opacity(0.05)))
+    }
+}
+
+/// Когда ничего не играет — быстрые кнопки запуска любимых сервисов.
+private struct EmptyPlayerView: View {
     var body: some View {
         VStack(spacing: 14) {
             VStack(spacing: 3) {
@@ -155,76 +188,57 @@ private struct EmptyPlayerView: View {
                     .foregroundStyle(.white.opacity(0.5))
             }
             HStack(spacing: 12) {
-                ForEach(services) { service in
-                    ServiceButton(name: service.name, icon: icon(for: service), storeBundleID: service.storeBundleID,
-                                  symbol: service.fallbackSymbol) {
-                        open(service)
-                    }
+                ForEach(MusicService.all) { service in
+                    ServiceButton(service: service, iconSize: 38, showsName: true)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-
-    private func appURL(for service: Service) -> URL? {
-        service.bundleIDs.lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }.first
-    }
-
-    private func icon(for service: Service) -> NSImage? {
-        appURL(for: service).map { NSWorkspace.shared.icon(forFile: $0.path) }
-    }
-
-    private func open(_ service: Service) {
-        if let url = appURL(for: service) {
-            NSWorkspace.shared.openApplication(at: url, configuration: .init())
-        } else if let web = service.web {
-            NSWorkspace.shared.open(web)
-        }
-    }
 }
 
 private struct ServiceButton: View {
-    var name: String
-    var icon: NSImage?
-    var storeBundleID: String?
-    var symbol: String
-    var action: () -> Void
+    var service: MusicService
+    var iconSize: CGFloat
+    var showsName: Bool
     @ViewState private var hovering = false
     @ViewState private var remoteIcon: NSImage?
 
     var body: some View {
-        Button(action: action) {
+        Button { service.open() } label: {
             VStack(spacing: 5) {
                 Group {
-                    if let icon {
+                    if let icon = service.localIcon {
                         Image(nsImage: icon).resizable()
                     } else if let remoteIcon {
                         Image(nsImage: remoteIcon)
                             .resizable()
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            .padding(2)
+                            .clipShape(RoundedRectangle(cornerRadius: iconSize * 0.24, style: .continuous))
+                            .padding(iconSize * 0.05)
                             .transition(.blurFade)
                     } else {
-                        Image(systemName: symbol)
-                            .font(.system(size: 16, weight: .semibold))
+                        Image(systemName: service.fallbackSymbol)
+                            .font(.system(size: iconSize * 0.42, weight: .semibold))
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(RoundedRectangle(cornerRadius: 9).fill(.white.opacity(0.12)))
+                            .background(RoundedRectangle(cornerRadius: iconSize * 0.24).fill(.white.opacity(0.12)))
                     }
                 }
-                .frame(width: 38, height: 38)
-                .scaleEffect(hovering ? 1.1 : 1)
+                .frame(width: iconSize, height: iconSize)
+                .scaleEffect(hovering ? 1.12 : 1)
                 .onAppear {
-                    guard icon == nil, let storeBundleID else { return }
-                    RemoteImages.appIcon(bundleID: storeBundleID) { image in
+                    guard service.localIcon == nil, let id = service.storeBundleID else { return }
+                    RemoteImages.appIcon(bundleID: id) { image in
                         withAnimation(.smooth(duration: 0.4)) { remoteIcon = image }
                     }
                 }
-                Text(name)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
-                    .lineLimit(1)
+                if showsName {
+                    Text(service.name)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
+                        .lineLimit(1)
+                }
             }
-            .frame(width: 90)
+            .frame(width: showsName ? 90 : iconSize)
         }
         .buttonStyle(PressableStyle())
         .onHover { h in withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { hovering = h } }

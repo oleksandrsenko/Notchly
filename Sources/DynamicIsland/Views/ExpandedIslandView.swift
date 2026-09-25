@@ -50,8 +50,11 @@ struct ExpandedIslandView: View {
             }
             .padding(.leading, 16)
             Spacer(minLength: model.notchSize.width + 20)
-            WeatherChip(service: model.weather)
-                .padding(.trailing, 20)
+            HStack(spacing: 10) {
+                WeatherChip(service: model.weather)
+                LanguageChip(keyboard: model.keyboard)
+            }
+            .padding(.trailing, 18)
         }
     }
 
@@ -122,6 +125,26 @@ private struct TabButton: View {
     }
 }
 
+/// Текущий язык клавиатуры; при переключении буквы перелистываются.
+private struct LanguageChip: View {
+    @ObservedObject var keyboard: KeyboardLayoutMonitor
+
+    var body: some View {
+        if !keyboard.code.isEmpty {
+            Text(keyboard.code)
+                .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.9))
+                .id(keyboard.code)
+                .transition(.push(from: .bottom).combined(with: .opacity))
+                .frame(width: 28, height: 18)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.white.opacity(0.14)))
+                .clipped()
+                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: keyboard.code)
+                .help("Раскладка клавиатуры")
+        }
+    }
+}
+
 /// Погода в правом углу шапки.
 private struct WeatherChip: View {
     @ObservedObject var service: WeatherService
@@ -141,6 +164,8 @@ private struct WeatherChip: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.5))
                         .lineLimit(1)
+                        .frame(maxWidth: 80, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .foregroundStyle(.white.opacity(0.9))
