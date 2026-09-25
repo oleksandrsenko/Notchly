@@ -298,28 +298,44 @@ private struct BatteryCarousel: View {
             if parts.count > 1 {
                 // Наушники с кейсом: левый, правый и кейс — каждый со своим зарядом, в одной карточке.
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(device.isConnected ? name : "\(name) · не подключены")
+                    Text(name)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
                     HStack(alignment: .top, spacing: 9) {
                         ForEach(parts) { level in budLevel(level) }
                     }
+                    if !device.isConnected { disconnectedNote }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 let level = device.primaryLevel
-                info(title: name, percent: level?.percent,
-                     note: device.isConnected ? nil : "не подключены")
+                VStack(alignment: .leading, spacing: 3) {
+                    info(title: name, percent: level?.percent, note: nil,
+                         color: level.map { Self.levelColor($0.percent) })
+                    if !device.isConnected { disconnectedNote }
+                }
             }
         }
         .padding(.horizontal, 12)
     }
 
+    private var disconnectedNote: some View {
+        Text("Не подключены")
+            .font(.system(size: 9.5, weight: .light))
+            .foregroundStyle(.white.opacity(0.4))
+    }
+
+    /// Цвет заряда: 100% — зелёный, к 20% плавно переходит в красный, ниже 20% — красный.
+    static func levelColor(_ percent: Int) -> Color {
+        let t = min(max(Double(percent - 20) / 80, 0), 1)
+        return Color(hue: 0.33 * t, saturation: 0.72, brightness: 0.95)
+    }
+
     /// Один наушник или кейс: подпись и крупный процент, как у MacBook.
     private func budLevel(_ level: DeviceBattery.Level) -> some View {
         let short = ["Левый": "Л", "Правый": "П"][level.label] ?? level.label
-        let color: Color = level.charging ? .green : level.percent <= 20 ? .red : .white
+        let color = Self.levelColor(level.percent)
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 2) {
                 Text(short)
@@ -339,7 +355,7 @@ private struct BatteryCarousel: View {
         .fixedSize()
     }
 
-    private func info(title: String, percent: Int?, charging: Bool = false, note: String?) -> some View {
+    private func info(title: String, percent: Int?, charging: Bool = false, note: String?, color: Color? = nil) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
@@ -350,6 +366,7 @@ private struct BatteryCarousel: View {
                     Text("\(percent)%")
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                         .monospacedDigit()
+                        .foregroundStyle(color ?? .white)
                         .contentTransition(.numericText(value: Double(percent)))
                         .animation(.smooth(duration: 0.6), value: percent)
                     BatteryGlyph(percent: percent, charging: charging, width: 28)

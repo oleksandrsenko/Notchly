@@ -157,6 +157,8 @@ struct TaskItem: Identifiable, Codable, Equatable {
     var createdAt = Date()
     /// Описание под задачей: заметки, ссылка на урок и т. п.
     var notes: String?
+    /// День задачи (начало дня). У старых задач его нет — тогда считается день создания.
+    var day: Date?
 
     /// Ссылки из описания — открываются кнопками и из напоминания.
     var links: [URL] { TaskItem.links(in: notes ?? "") }
@@ -171,16 +173,40 @@ struct TaskItem: Identifiable, Codable, Equatable {
 /// Компактный список дел. Сохраняется сразу после каждого изменения.
 final class TasksStore: ObservableObject {
     @Published private(set) var items: [TaskItem] = []
+    /// Мини-планер: выбранный день — 0 (сегодня) … 6. Дальше недели задачи не планируются.
+    @Published var selectedDay = 0
+    static let days = 7
     private let persistent: Bool
 
     init(persistent: Bool = true) {
         self.persistent = persistent
-        if persistent { items = load([TaskItem].self, from: "tasks.json") ?? [] }
+        if persistent {
+            items = load([TaskItem].self, from: "tasks.json") ?? []
+            // Выполненные задачи старше недели больше нигде не показываются — убираем их.
+            let weekAgo = Self.date(forOffset: -7)
+            let kept = items.filter { !$0.done || Self.day(of: $0) >= weekAgo }
+            if kept.count != items.count { items = kept; persist() }
+        }
     }
 
-    /// Невыполненные сверху (по времени), выполненные внизу.
-    var sorted: [TaskItem] {
-        items.sorted { a, b in
+    static func date(forOffset offset: Int) -> Date {
+        let cal = Calendar.current
+        return cal.date(byAdding: .day, value: offset, to: cal.startOfDay(for: Date())) ?? Date()
+    }
+
+    static func day(of task: TaskItem) -> Date {
+        Calendar.current.startOfDay(for: task.day ?? task.createdAt)
+    }
+
+    /// Задачи дня. В «сегодня» попадают и невыполненные задачи прошлых дней — они переносятся сами.
+    func tasks(forOffset offset: Int) -> [TaskItem] {
+        let target = Self.date(forOffset: offset)
+        return items.filter { task in
+            let day = Self.day(of: task)
+            return day == target || (offset == 0 && day < target && !task.done)
+        }
+        .sorted { a, b in
+            // Невыполненные сверху (по времени), выполненные внизу.
             if a.done != b.done { return !a.done }
             switch (a.time, b.time) {
             case let (x?, y?) where x != y: return x < y
@@ -191,12 +217,17 @@ final class TasksStore: ObservableObject {
         }
     }
 
-    func add(_ text: String, time: String? = nil) {
+    func openCount(forOffset offset: Int) -> Int {
+        tasks(forOffset: offset).filter { !$0.done }.count
+    }
+
+    /// Новая задача попадает в выбранный день планера.
+    func add(_ text: String, time: String? = nil, dayOffset: Int? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) {
-            items.append(TaskItem(text: trimmed, time: time))
-        }
+        var item = TaskItem(text: trimmed, time: time)
+        item.day = Self.date(forOffset: dayOffset ?? selectedDay)
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items.append(item) }
         persist()
     }
 
@@ -234,8 +265,10 @@ final class TasksStore: ObservableObject {
         persist()
     }
 
+    /// Убирает выполненные задачи выбранного дня.
     func clearDone() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { items.removeAll(where: \.done) }
+        let ids = Set(tasks(forOffset: selectedDay).filter(\.done).map(\.id))
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { items.removeAll { ids.contains($0.id) } }
         persist()
     }
 

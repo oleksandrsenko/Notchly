@@ -15,7 +15,7 @@ struct NotesView: View {
     @ViewState private var direction: Edge = .trailing
     @ViewState private var richController = RichTextController()
     @FocusState private var editorFocused: Bool
-    @ViewState private var mode: Mode = .notes
+    @ViewState private var mode: Mode = SnapshotFlags.notesMode
     @Namespace private var segmentNS
 
     var body: some View {
@@ -73,11 +73,8 @@ struct NotesView: View {
                     }
                     .foregroundStyle(.white.opacity(0.8))
                     .transition(.blurFade)
-                } else if mode == .tasks && tasks.items.contains(where: \.done) {
-                    Button("Убрать выполненные") { tasks.clearDone() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.55))
+                } else if mode == .tasks {
+                    DayStrip(store: tasks)
                         .transition(.opacity)
                 } else if mode == .clipboard && !clipboard.groups.isEmpty {
                     Button("Очистить") { clipboard.clear() }
@@ -240,5 +237,76 @@ private struct NoteRow: View {
             Button("Удалить", role: .destructive, action: onDelete)
         }
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+    }
+}
+
+/// Дни мини-планера в шапке задач: «Сегодня», «Завтра» и дальше дни недели — максимум неделя вперёд.
+private struct DayStrip: View {
+    @ObservedObject var store: TasksStore
+    @Namespace private var ns
+
+    private static let weekday: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        f.dateFormat = "EE"
+        return f
+    }()
+
+    private func title(_ offset: Int) -> String {
+        switch offset {
+        case 0: return "Сегодня"
+        case 1: return "Завтра"
+        default:
+            let text = Self.weekday.string(from: TasksStore.date(forOffset: offset))
+            return text.prefix(1).uppercased() + text.dropFirst()
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<TasksStore.days, id: \.self) { offset in
+                let selected = store.selectedDay == offset
+                let open = store.openCount(forOffset: offset)
+                Button {
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) { store.selectedDay = offset }
+                } label: {
+                    Text(title(offset))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(selected ? .black : .white.opacity(0.6))
+                        .fixedSize()
+                        .padding(.horizontal, 7)
+                        .frame(height: 22)
+                        .background {
+                            if selected {
+                                Capsule().fill(.white).matchedGeometryEffect(id: "day", in: ns)
+                            }
+                        }
+                        // Точка — в этот день есть невыполненные задачи.
+                        .overlay(alignment: .bottom) {
+                            if open > 0 && !selected {
+                                Circle().fill(.white.opacity(0.55)).frame(width: 3, height: 3).offset(y: -1)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                .help(TasksView.dayTitle(offset, lowercased: offset > 1) + (open > 0 ? " · задач: \(open)" : ""))
+            }
+            if store.tasks(forOffset: store.selectedDay).contains(where: \.done) {
+                Button { store.clearDone() } label: {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .help("Убрать выполненные")
+                .transition(.opacity)
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(.white.opacity(0.06)))
+        .fixedSize()
     }
 }

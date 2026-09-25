@@ -27,23 +27,20 @@ struct TasksView: View {
         HStack(spacing: 12) {
             VStack(spacing: 4) {
                 addRow
-                if store.items.isEmpty {
-                    Text("Задач пока нет")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.35))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 1) {
-                            ForEach(store.sorted) { task in
-                                TaskRow(task: task) { store.toggle(task.id) } onDelete: { store.remove(task.id) }
-                                    onEdit: { store.update(task.id, text: $0) }
-                                    onOpen: { openedID = task.id }
-                                    .transition(.opacity.combined(with: .offset(y: -4)))
-                            }
+                // Мини-планер: страница на каждый день недели, листается свайпом или выбором дня в шапке.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 0) {
+                        ForEach(0..<TasksStore.days, id: \.self) { offset in
+                            dayPage(offset)
+                                .containerRelativeFrame(.horizontal)
+                                .id(offset)
                         }
                     }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.paging)
+                .scrollPosition(id: Binding(get: { store.selectedDay },
+                                            set: { if let day = $0 { store.selectedDay = day } }))
             }
             .frame(maxWidth: .infinity)
 
@@ -52,12 +49,49 @@ struct TasksView: View {
         }
     }
 
+    @ViewBuilder
+    private func dayPage(_ offset: Int) -> some View {
+        let items = store.tasks(forOffset: offset)
+        if items.isEmpty {
+            Text(offset == 0 ? "Задач на сегодня нет" : "На \(TasksView.dayTitle(offset, lowercased: true)) задач нет")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.white.opacity(0.35))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 1) {
+                    ForEach(items) { task in
+                        TaskRow(task: task) { store.toggle(task.id) } onDelete: { store.remove(task.id) }
+                            onEdit: { store.update(task.id, text: $0) }
+                            onOpen: { openedID = task.id }
+                            .transition(.opacity.combined(with: .offset(y: -4)))
+                    }
+                }
+            }
+        }
+    }
+
+    /// «Сегодня», «Завтра», дальше — день недели и число: «Вс, 27».
+    static func dayTitle(_ offset: Int, lowercased: Bool = false) -> String {
+        switch offset {
+        case 0: return lowercased ? "сегодня" : "Сегодня"
+        case 1: return lowercased ? "завтра" : "Завтра"
+        default:
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "ru_RU")
+            f.dateFormat = lowercased ? "d MMMM" : "EE, d"
+            let text = f.string(from: TasksStore.date(forOffset: offset))
+            return lowercased ? text : text.prefix(1).uppercased() + text.dropFirst()
+        }
+    }
+
     private var addRow: some View {
         HStack(spacing: 8) {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(draftFocused ? 0.8 : 0.35))
-            TextField("Новая задача", text: $draft)
+            TextField(store.selectedDay == 0 ? "Новая задача" : "Задача на \(TasksView.dayTitle(store.selectedDay, lowercased: true))",
+                      text: $draft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .focused($draftFocused)

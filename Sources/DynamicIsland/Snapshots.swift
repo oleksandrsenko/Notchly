@@ -4,6 +4,7 @@ import SwiftUI
 enum SnapshotFlags {
     static var batteryPage = 0
     static var openedTask: UUID?
+    static var notesMode: NotesView.Mode = .notes
 }
 
 /// `DynamicIsland --snapshots <папка>` рендерит все состояния острова в PNG —
@@ -68,7 +69,8 @@ enum Snapshots {
             DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
                 .init(label: "Левый", symbol: "airpod.left", percent: 100),
                 .init(label: "Правый", symbol: "airpod.right", percent: 18),
-                .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 64, charging: true)]),
+                .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 64, charging: true)],
+                isConnected: false),
             DeviceBattery(name: "Magic Mouse", symbol: "magicmouse.fill", levels: [.init(label: "", symbol: "", percent: 57)])],
             phone: PhoneBattery(percent: 76, charging: true, updated: Date().addingTimeInterval(-600)))
         model.tasks.debugSet([
@@ -76,6 +78,7 @@ enum Snapshots {
             TaskItem(text: "Немецкий", time: "18:30", notes: "Урок 12: Perfekt\nhttps://www.youtube.com/watch?v=abc\nПовторить слова из прошлого урока"),
             TaskItem(text: "Созвон с командой", time: "22:00"),
             TaskItem(text: "Купить продукты"),
+            TaskItem(text: "Сдать эссе", time: "12:00", day: TasksStore.date(forOffset: 1)),
             TaskItem(text: "Ответить на письма", done: true)])
         let tasksHost = NSHostingView(rootView: TasksView(store: model.tasks, gemini: model.gemini)
             .frame(width: 596, height: 118).padding(20).background(Color.black).preferredColorScheme(.dark))
@@ -120,6 +123,9 @@ enum Snapshots {
             AppNotification(id: "b", bundleID: "com.apple.Passwords", title: "Пароли", subtitle: "",
                             body: "Обнаружен скомпрометированный пароль", date: Date().addingTimeInterval(-3600))])
         for tab in IslandTab.allCases { model.tab = tab; shot("4-\(tab.rawValue)") }
+        SnapshotFlags.notesMode = .tasks
+        model.tab = .home; model.tab = .notes; shot("4-notes-tasks")
+        SnapshotFlags.notesMode = .notes
         SnapshotFlags.batteryPage = 1
         model.tab = .music; model.tab = .home; shot("4-home-airpods")
         SnapshotFlags.batteryPage = 0

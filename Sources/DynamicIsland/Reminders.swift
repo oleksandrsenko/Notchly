@@ -174,7 +174,8 @@ final class ReminderCenter {
     /// Задачи со временем на сегодня (невыполненные).
     private func taskCandidates(now: Date) -> [Reminder] {
         let cal = Calendar.current
-        return tasks.items.compactMap { task in
+        // Только задачи на сегодня (включая перенесённые со вчера), не на будущие дни.
+        return tasks.tasks(forOffset: 0).compactMap { task in
             guard !task.done, let time = task.time else { return nil }
             let parts = time.split(separator: ":").compactMap { Int($0) }
             guard parts.count == 2,
