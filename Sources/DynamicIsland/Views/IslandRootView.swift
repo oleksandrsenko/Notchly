@@ -74,19 +74,34 @@ struct IslandRootView: View {
         }
     }
 
-    @ViewBuilder
     private var content: some View {
+        ZStack(alignment: .top) {
+            compactContent
+            if model.expandedContentMounted {
+                ExpandedIslandView(model: model, media: media)
+                    // Содержимое всегда полного размера: при сворачивании форма его обрезает, а не сжимает,
+                    // поэтому карточки (MacBook, погода) не ломаются по ходу анимации.
+                    .frame(width: IslandMetrics.expandedWidth,
+                           height: model.notchSize.height + IslandMetrics.expandedContentHeight)
+                    // Открытие: содержимое опускается вместе с островом и проявляется.
+                    // Закрытие — наоборот: остров уходит вверх, а содержимое гаснет, чуть сползая вниз.
+                    .opacity(model.isExpanded ? 1 : 0)
+                    .offset(y: model.isExpanded ? 0 : 8)
+                    .animation(model.isExpanded ? .easeOut(duration: 0.3).delay(0.06) : .easeOut(duration: 0.24),
+                               value: model.isExpanded)
+                    .allowsHitTesting(model.isExpanded)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .offset(y: -10))
+                            .animation(.easeOut(duration: 0.3).delay(0.06)),
+                        removal: .identity))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var compactContent: some View {
         if model.isExpanded {
-            ExpandedIslandView(model: model, media: media)
-                // Содержимое всегда полного размера: при сворачивании форма его обрезает, а не сжимает,
-                // поэтому карточки (MacBook, погода) не ломаются по ходу анимации.
-                .frame(width: IslandMetrics.expandedWidth,
-                       height: model.notchSize.height + IslandMetrics.expandedContentHeight)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .offset(y: -10))
-                        .animation(.easeOut(duration: 0.3).delay(0.06)),
-                    // Содержимое гаснет одновременно с тем, как остров сжимается вверх и к центру.
-                    removal: .opacity.animation(.easeOut(duration: 0.24))))
+            Color.clear
         } else if let event = model.event, model.eventExpanded {
             EventView(event: event, notchHeight: model.notchSize.height) { model.dismissEvent() }
                 .frame(width: event.size.width, height: model.notchSize.height + event.size.height)

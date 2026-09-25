@@ -91,13 +91,18 @@ enum IslandMetrics {
     /// Раскрытие «сверху вниз»: остров быстро расширяется вдоль верхней кромки и следом опускается.
     static let expandWidth = Animation.spring(response: 0.26, dampingFraction: 0.94)
     static let expandHeight = Animation.spring(response: 0.4, dampingFraction: 0.86)
-    /// Сворачивание: остров одновременно поднимается и сужается к вырезу, содержимое гаснет в то же время.
+    /// Сворачивание — обратное раскрытию: остров уходит вверх, а по ширине сужается чуть медленнее,
+    /// поэтому движение читается как подъём, а не как схлопывание вбок.
     static let collapseHeight = Animation.spring(response: 0.34, dampingFraction: 1)
-    static let collapseWidth = collapseHeight
+    static let collapseWidth = Animation.spring(response: 0.42, dampingFraction: 1)
 }
 
 final class IslandModel: ObservableObject {
     @Published var isExpanded = false
+    /// Раскрытое содержимое остаётся в иерархии, пока остров сворачивается, и убирается уже невидимым —
+    /// иначе SwiftUI удаляет его вне общей раскладки, и оно «уезжает» вбок.
+    @Published private(set) var expandedContentMounted = false
+    private var unmountWork: DispatchWorkItem?
     @Published var tab: IslandTab {
         didSet {
             if tab == .notifications || oldValue == .notifications { markNotificationsSeen() }
@@ -250,6 +255,8 @@ final class IslandModel: ObservableObject {
             weather.refresh()
         }
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        unmountWork?.cancel()
+        expandedContentMounted = true
         animateSize(IslandMetrics.expandWidth, IslandMetrics.expandHeight)
         withAnimation(IslandMetrics.expandHeight) { isExpanded = true }
     }
@@ -259,6 +266,12 @@ final class IslandModel: ObservableObject {
         vault.lock()
         animateSize(IslandMetrics.collapseWidth, IslandMetrics.collapseHeight)
         withAnimation(IslandMetrics.collapseHeight) { isExpanded = false }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.isExpanded else { return }
+            self.expandedContentMounted = false
+        }
+        unmountWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     func showEvent(_ event: IslandEvent) {
