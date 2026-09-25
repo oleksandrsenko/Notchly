@@ -152,3 +152,38 @@ struct FocusCompactView: View {
         }
     }
 }
+
+/// Обычный таймер в свёрнутом острове: песочные часы в кольце и обратный отсчёт.
+struct CountdownCompactView: View {
+    @ObservedObject var countdown: CountdownTimer
+    var notchWidth: CGFloat
+
+    static let tint = Color(hue: 0.09, saturation: 0.8, brightness: 0.9)
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(spacing: 0) {
+                ZStack {
+                    Circle().stroke(.white.opacity(0.15), lineWidth: 2.5)
+                    Circle()
+                        .trim(from: 0, to: countdown.progress(at: context.date))
+                        .stroke(Self.tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: countdown.progress(at: context.date))
+                    Image(systemName: "hourglass")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 20, height: 20)
+                .padding(.leading, 14)
+                Spacer(minLength: notchWidth)
+                Text(countdown.remaining(at: context.date).clock)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(countdown.isPaused ? .white.opacity(0.45) : .white)
+                    .padding(.trailing, 14)
+            }
+            .frame(maxHeight: .infinity)
+        }
+    }
+}

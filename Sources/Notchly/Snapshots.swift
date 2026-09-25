@@ -5,6 +5,7 @@ enum SnapshotFlags {
     static var batteryPage = 0
     static var openedTask: UUID?
     static var notesMode: NotesView.Mode = .notes
+    static var timerMode: TimerView.Mode = .focus
 }
 
 /// `Notchly --snapshots <папка>` рендерит все состояния острова в PNG —
@@ -76,6 +77,8 @@ enum Snapshots {
         model.event = .reminder(Reminder(id: "c", title: "Созвон с командой", date: Date().addingTimeInterval(300),
                                          minutesBefore: 5, source: .calendar, link: URL(string: "https://meet.google.com/abc"))); shot("10-reminder-calendar")
         model.event = .focus(.workFinished(next: .shortBreak, heldNotifications: 3)); shot("12-focus-event")
+        model.event = .timerDone(600); shot("13-timer-done")
+        model.event = .alarm(Alarm(time: "07:30")); shot("13-alarm")
         model.event = nil
         model.batteries.debugSet(devices: [
             DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
@@ -152,8 +155,20 @@ enum Snapshots {
         model.media.debugSet(title: "", artist: "", album: "", duration: 0, elapsed: 0, playing: false, artwork: nil, bundleID: nil)
         model.tab = .music; shot("5-empty")
         model.tab = .home; shot("5-home-no-music")
+        model.alarms.debugSet([Alarm(time: "07:30"), Alarm(time: "13:00", enabled: false)])
+        // Сначала запущенный «Помидор», потом разделы вкладки в покое.
         model.focus.debugSet(phase: .work, remaining: 18 * 60 + 42, title: "Немецкий", completed: 2)
-        model.tab = .music; model.tab = .home; shot("12-focus-home")
+        SnapshotFlags.timerMode = .focus
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .timer; shot("12-focus-home")
+        model.focus.stop()
+        for mode in TimerView.Mode.allCases {
+            SnapshotFlags.timerMode = mode
+            model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .timer
+            shot("13-timer-\(mode == .focus ? "focus" : mode == .timer ? "countdown" : "alarm")")
+        }
+        model.focus.debugSet(phase: .work, remaining: 18 * 60 + 42, title: "Немецкий", completed: 2)
         model.isExpanded = false; model.expandedContentVisible = false; shot("12-focus-compact")
+        model.focus.stop()
+        model.countdown.debugSet(minutes: 10, remaining: 6 * 60 + 12); shot("13-countdown-compact")
     }
 }

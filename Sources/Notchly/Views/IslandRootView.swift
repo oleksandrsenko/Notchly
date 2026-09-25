@@ -64,6 +64,7 @@ struct IslandRootView: View {
         .onDrop(of: [.fileURL], isTargeted: $model.isDropTargeted, perform: handleDrop)
         .animation(IslandMetrics.softSpring, value: media.showsLiveActivity)
         .animation(IslandMetrics.softSpring, value: model.focus.isActive)
+        .animation(IslandMetrics.softSpring, value: model.countdown.isActive)
         .animation(IslandMetrics.softSpring, value: model.peek)
         .animation(IslandMetrics.spring, value: model.hud)
         .animation(IslandMetrics.spring, value: model.clipPeek)
@@ -102,7 +103,7 @@ struct IslandRootView: View {
                     switch event {
                     case .device(let device): model.showDeviceSheet(device)
                     case .notification(let item): openApp(item.bundleID); model.dismissEvent()
-                    case .deviceSheet, .reminder, .focus: break
+                    case .deviceSheet, .reminder, .focus, .timerDone, .alarm: break
                     default: model.dismissEvent()
                     }
                 }
@@ -123,6 +124,10 @@ struct IslandRootView: View {
                 .transition(Self.compactTransition)
         } else if model.focus.isActive && !model.peek {
             FocusCompactView(focus: model.focus, notchWidth: model.notchSize.width)
+                .frame(width: body.width, height: body.height)
+                .transition(Self.compactTransition)
+        } else if model.countdown.isActive && !model.peek {
+            CountdownCompactView(countdown: model.countdown, notchWidth: model.notchSize.width)
                 .frame(width: body.width, height: body.height)
                 .transition(Self.compactTransition)
         } else if media.showsLiveActivity || (model.peek && media.hasTrack) {

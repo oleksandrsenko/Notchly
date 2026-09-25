@@ -49,6 +49,31 @@ struct EventView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
                 .frame(maxHeight: .infinity)
+        case .timerDone(let duration):
+            ActionCard(symbol: "hourglass.bottomhalf.filled", tint: .orange,
+                       title: "Таймер завершён",
+                       subtitle: "\(Int(duration / 60)) мин") {
+                CardButton(title: "Ещё раз", systemImage: "arrow.clockwise") {
+                    model.countdown.start(minutes: Int(duration / 60))
+                    model.dismissEvent()
+                }
+                CardButton(title: "Готово", prominent: true) { model.dismissEvent() }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+            .frame(maxHeight: .infinity)
+        case .alarm(let alarm):
+            ActionCard(symbol: "alarm.fill", tint: .yellow, title: "Будильник · \(alarm.time)",
+                       subtitle: "Пора!") {
+                CardButton(title: "+5 мин") {
+                    model.alarms.snooze()
+                    model.dismissEvent()
+                }
+                CardButton(title: "Стоп", systemImage: "stop.fill", prominent: true) { model.dismissEvent() }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+            .frame(maxHeight: .infinity)
         }
     }
 }
@@ -75,6 +100,35 @@ private struct CardButton: View {
             .fixedSize()
         }
         .buttonStyle(PressableStyle())
+    }
+}
+
+/// Карточка с иконкой, заголовком, подписью и кнопками справа.
+private struct ActionCard<Buttons: View>: View {
+    var symbol: String
+    var tint: Color
+    var title: String
+    var subtitle: String
+    @ViewBuilder var buttons: () -> Buttons
+    @ViewState private var appeared = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 38, height: 38)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint.gradient))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(subtitle).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            HStack(spacing: 6) { buttons() }
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : -4)
+        .onAppear { withAnimation(.easeOut(duration: 0.35).delay(0.12)) { appeared = true } }
     }
 }
 

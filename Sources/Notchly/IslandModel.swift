@@ -3,16 +3,19 @@ import SwiftUI
 import Combine
 
 enum IslandTab: String, CaseIterable, Identifiable {
-    case home, music, shelf, notes, controls, notifications
+    // Порядок совпадает с шапкой слева направо — от него зависит направление перелистывания.
+    case home, music, timer, notes, shelf, controls, notifications
     var id: String { rawValue }
 
-    /// Вкладки в шапке слева. Справа, рядом с колокольчиком, — «Управление» (громкость и яркость).
-    static let bar: [IslandTab] = [.home, .music, .shelf, .notes]
+    /// Вкладки в шапке слева. Справа, рядом с колокольчиком, — «Файлы» и «Управление».
+    static let bar: [IslandTab] = [.home, .music, .timer, .notes]
+    static let trailing: [IslandTab] = [.shelf, .controls]
 
     var icon: String {
         switch self {
         case .home: return "square.grid.2x2.fill"
         case .music: return "music.note"
+        case .timer: return "timer"
         case .shelf: return "folder.fill"
         case .notes: return "note.text"
         case .controls: return "slider.horizontal.3"
@@ -24,6 +27,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "Главная"
         case .music: return "Музыка"
+        case .timer: return "Таймер"
         case .shelf: return "Файлы"
         case .notes: return "Заметки"
         case .controls: return "Управление"
@@ -42,6 +46,8 @@ enum IslandEvent: Equatable {
     case notification(AppNotification)
     case reminder(Reminder)
     case focus(FocusTimer.Transition)
+    case timerDone(TimeInterval)
+    case alarm(Alarm)
 
     /// Окно, которое не закрывается по нажатию (в нём свои кнопки).
     var isDevice: Bool { if case .deviceSheet = self { return true } else { return false } }
@@ -54,14 +60,14 @@ enum IslandEvent: Equatable {
         case .device: return .zero
         case .deviceSheet: return IslandMetrics.deviceSheetSize
         case .notification: return IslandMetrics.notificationSize
-        case .reminder, .focus: return IslandMetrics.reminderSize
+        case .reminder, .focus, .timerDone, .alarm: return IslandMetrics.reminderSize
         }
     }
 
     /// Уведомления и напоминания ждут в очереди, пока показана другая карточка.
     var isQueued: Bool {
         switch self {
-        case .notification, .reminder, .focus: return true
+        case .notification, .reminder, .focus, .timerDone, .alarm: return true
         default: return false
         }
     }
@@ -71,7 +77,7 @@ enum IslandEvent: Equatable {
         case .charging: return 32
         case .device: return 14
         case .deviceSheet: return 42
-        case .notification, .reminder, .focus: return 28
+        case .notification, .reminder, .focus, .timerDone, .alarm: return 28
         }
     }
 
@@ -82,6 +88,8 @@ enum IslandEvent: Equatable {
         case .deviceSheet: return 10
         case .notification: return 4
         case .reminder, .focus: return 8
+        case .timerDone: return 10
+        case .alarm: return 30
         }
     }
 }
@@ -169,6 +177,8 @@ final class IslandModel: ObservableObject {
     let systemNotifications = SystemNotificationsReader()
     let reminders: ReminderCenter
     let focus = FocusTimer()
+    let countdown = CountdownTimer()
+    let alarms: AlarmStore
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
@@ -183,6 +193,7 @@ final class IslandModel: ObservableObject {
         notes = NotesStore(persistent: persistent)
         tasks = TasksStore(persistent: persistent)
         reminders = ReminderCenter(tasks: tasks)
+        alarms = AlarmStore(persistent: persistent)
         tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .home
 
         keys.handler = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
@@ -195,6 +206,20 @@ final class IslandModel: ObservableObject {
             SoftChime.play()
             self?.presentWhenCollapsed(.focus(transition))
         }
+        countdown.onFinish = { [weak self] duration in
+            SoftChime.play(times: 2)
+            self?.presentWhenCollapsed(.timerDone(duration))
+        }
+        alarms.onFire = { [weak self] alarm in
+            SoftChime.play(times: 4)
+            self?.presentWhenCollapsed(.alarm(alarm))
+        }
+        if persistent { alarms.start() }
+        countdown.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { withAnimation(IslandMetrics.softSpring) { self?.objectWillChange.send() } }
+            }
+            .store(in: &bag)
         // Таймер фокуса меняет форму свёрнутого острова.
         focus.$phase
             .removeDuplicates()
@@ -258,7 +283,7 @@ final class IslandModel: ObservableObject {
         if peek && media.hasTrack {
             return CGSize(width: n.width + IslandMetrics.peekWing * 2, height: n.height + IslandMetrics.peekExtraHeight)
         }
-        if focus.isActive {
+        if focus.isActive || countdown.isActive {
             return CGSize(width: n.width + IslandMetrics.focusWing * 2, height: n.height)
         }
         if media.showsLiveActivity {

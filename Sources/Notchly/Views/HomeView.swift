@@ -9,7 +9,7 @@ struct HomeView: View {
 
     var body: some View {
         HStack(spacing: 18) {
-            HomeLeftColumn(model: model, media: media, focus: model.focus, tasks: model.tasks,
+            HomeLeftColumn(media: media, tasks: model.tasks,
                            calendar: model.reminders.calendar, openMusic: openMusic)
                 .frame(width: 200)
                 .staggered(0)
@@ -32,24 +32,14 @@ struct HomeView: View {
 
 }
 
-/// Левая колонка главной: часы, а во время фокуса — таймер «Помидора».
-/// Без музыки под часами — сводка дня и кнопка фокуса.
+/// Левая колонка главной: часы и дата; без музыки — ещё и сводка задач на сегодня.
 private struct HomeLeftColumn: View {
-    var model: IslandModel
     @ObservedObject var media: MediaController
-    @ObservedObject var focus: FocusTimer
     @ObservedObject var tasks: TasksStore
     @ObservedObject var calendar: CalendarService
     var openMusic: () -> Void
 
     var body: some View {
-        Group {
-            if focus.isActive { focusPanel.transition(.opacity) } else { clock.transition(.opacity) }
-        }
-        .animation(.easeInOut(duration: 0.25), value: focus.isActive)
-    }
-
-    private var clock: some View {
         TimelineView(.everyMinute) { ctx in
             VStack(alignment: .center, spacing: 2) {
                 // Без музыки время стоит по центру своей колонки, с музыкой — наверху, над мини-плеером.
@@ -68,8 +58,6 @@ private struct HomeLeftColumn: View {
                 } else {
                     daySummary(now: ctx.date)
                         .padding(.top, 8)
-                    focusButton
-                        .padding(.top, 6)
                     Spacer(minLength: 0)
                 }
             }
@@ -113,68 +101,6 @@ private struct HomeLeftColumn: View {
         if mod10 == 1 && mod100 != 11 { return "задача" }
         if (2...4).contains(mod10) && !(12...14).contains(mod100) { return "задачи" }
         return "задач"
-    }
-
-    private var focusButton: some View {
-        Button { model.startFocus() } label: {
-            Label("Фокус · 25 мин", systemImage: "timer")
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
-                .padding(.horizontal, 11)
-                .frame(height: 24)
-                .background(Capsule().fill(.white.opacity(0.1)))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(PressableStyle())
-        .help("Помидор: 25 минут работы, потом перерыв")
-    }
-
-    /// Таймер «Помидора»: крупный отсчёт и кнопки пауза / пропустить / стоп.
-    private var focusPanel: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            VStack(spacing: 4) {
-                Spacer(minLength: 0)
-                HStack(spacing: 5) {
-                    Circle().fill(FocusCompactView.tint(for: focus.phase)).frame(width: 6, height: 6)
-                    Text(focus.taskTitle.map { "\(focus.phase.title) · \($0)" } ?? focus.phase.title)
-                        .lineLimit(1)
-                }
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.7))
-                .frame(maxWidth: 196)
-                Text(focus.remaining(at: ctx.date).clock)
-                    .font(.system(size: 44, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(focus.isPaused ? .white.opacity(0.5) : .white)
-                HStack(spacing: 10) {
-                    control(focus.isPaused ? "play.fill" : "pause.fill", help: focus.isPaused ? "Продолжить" : "Пауза") {
-                        focus.togglePause()
-                    }
-                    control("forward.end.fill", help: focus.phase.isBreak ? "Закончить перерыв" : "К перерыву") {
-                        focus.skip()
-                    }
-                    control("stop.fill", help: "Остановить") { focus.stop() }
-                }
-                Text("Подходов сегодня: \(focus.completedToday)")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .padding(.top, 2)
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private func control(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 26)
-                .background(Capsule().fill(.white.opacity(0.12)))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(PressableStyle())
-        .help(help)
     }
 
     @ViewBuilder
@@ -418,18 +344,30 @@ private struct BatteryCarousel: View {
 
     private func headphonesPage(_ device: DeviceBattery) -> some View {
         let name = device.name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
-        let parts = device.levels.filter { !$0.label.isEmpty }
-        return HStack(spacing: 10) {
+        let left = device.levels.first { $0.label == "Левый" }
+        let right = device.levels.first { $0.label == "Правый" }
+        let casing = device.levels.first { $0.label == "Кейс" }
+        let pair = [left, right].compactMap { $0 }
+        return HStack(spacing: 12) {
             headphonesArt(device)
-            if parts.count > 1 {
-                // Наушники с кейсом: левый, правый и кейс — каждый со своим зарядом, в одной карточке.
-                VStack(alignment: .leading, spacing: 5) {
+                .frame(width: 60)
+            if !pair.isEmpty || casing != nil {
+                // Как у MacBook: название и крупные проценты с батарейкой — отдельно наушники, отдельно кейс.
+                VStack(alignment: .leading, spacing: 3) {
                     Text(name)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
-                    HStack(alignment: .top, spacing: 9) {
-                        ForEach(parts) { level in budLevel(level) }
+                    if let bud = pair.min(by: { $0.percent < $1.percent }) {
+                        let help = left != nil && right != nil
+                            ? "Левый \(left!.percent)% · правый \(right!.percent)%" : "Наушники"
+                        levelRow(bud.percent, charging: pair.contains(where: \.charging), symbol: device.symbol)
+                            .help(help)
+                    }
+                    if let casing {
+                        levelRow(casing.percent, charging: casing.charging,
+                                 symbol: casing.symbol.isEmpty ? "airpodspro.chargingcase.wireless.fill" : casing.symbol)
+                            .help("Кейс")
                     }
                     if !device.isConnected { disconnectedNote }
                 }
@@ -443,7 +381,25 @@ private struct BatteryCarousel: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
+    }
+
+    /// Строка заряда: значок (наушники или кейс), крупный процент и батарейка — как у MacBook.
+    private func levelRow(_ percent: Int, charging: Bool, symbol: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(width: 18)
+            Text("\(percent)%")
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Self.levelColor(percent))
+                .contentTransition(.numericText(value: Double(percent)))
+                .animation(.smooth(duration: 0.6), value: percent)
+                .frame(minWidth: 50, alignment: .leading)
+            BatteryGlyph(percent: percent, charging: charging, width: 24)
+        }
     }
 
     private var disconnectedNote: some View {
@@ -470,29 +426,6 @@ private struct BatteryCarousel: View {
         case .symbol:
             DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 50)
         }
-    }
-
-    /// Один наушник или кейс: подпись и крупный процент, как у MacBook.
-    private func budLevel(_ level: DeviceBattery.Level) -> some View {
-        let short = ["Левый": "Л", "Правый": "П"][level.label] ?? level.label
-        let color = Self.levelColor(level.percent)
-        return VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 2) {
-                Text(short)
-                if level.charging {
-                    Image(systemName: "bolt.fill").font(.system(size: 7.5, weight: .bold)).foregroundStyle(.green)
-                }
-            }
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.white.opacity(0.45))
-            Text("\(level.percent)%")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(color)
-                .contentTransition(.numericText(value: Double(level.percent)))
-                .animation(.smooth(duration: 0.6), value: level.percent)
-        }
-        .fixedSize()
     }
 
     private func info(title: String, percent: Int?, charging: Bool = false, note: String?, color: Color? = nil) -> some View {

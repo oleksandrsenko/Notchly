@@ -30,11 +30,18 @@ enum SoftChime {
 
     static var isAvailable: Bool { sound != nil }
 
-    static func play() {
+    static func play(times: Int = 1) {
         guard let sound else { return }
         sound.stop()
         sound.volume = 0.35
         sound.play()
+        // Будильник и таймер звучат несколько раз подряд, с паузами.
+        for i in 1..<max(times, 1) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4 * Double(i)) {
+                sound.stop()
+                sound.play()
+            }
+        }
     }
 
     private static func makeWAV() -> Data {

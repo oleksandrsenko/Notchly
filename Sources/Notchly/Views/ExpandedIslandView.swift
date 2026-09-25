@@ -48,8 +48,10 @@ struct ExpandedIslandView: View {
             .padding(.leading, 16)
             Spacer(minLength: model.notchSize.width + 20)
             HStack(spacing: 8) {
-                TabButton(tab: .controls, selected: model.tab == .controls, badge: 0, ns: tabNS) {
-                    select(model.tab == .controls ? .home : .controls)
+                ForEach(IslandTab.trailing) { tab in
+                    TabButton(tab: tab, selected: model.tab == tab, badge: badge(for: tab), ns: tabNS) {
+                        select(model.tab == tab ? .home : tab)
+                    }
                 }
                 NotificationBell(model: model, gmail: model.gmail, system: model.systemNotifications) {
                     select(model.tab == .notifications ? .home : .notifications)
@@ -76,6 +78,8 @@ struct ExpandedIslandView: View {
         switch tab {
         case .home: HomeView(model: model, media: media, batteries: model.batteries) { select(.music) }
         case .music: MusicPlayerView(media: media)
+        case .timer: TimerView(model: model, focus: model.focus, countdown: model.countdown,
+                               alarms: model.alarms, tasks: model.tasks)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
         case .notes: NotesView(store: model.notes, clipboard: model.clipboard, vault: model.vault,
                                      tasks: model.tasks, gemini: model.gemini, focus: model.focus)

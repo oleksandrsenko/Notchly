@@ -21,11 +21,11 @@
 
 | | |
 |---|---|
-| **Home** — clock, mini player, weather and a swipeable battery card: MacBook, AirPods (left / right / case), Magic Mouse, iPhone. When nothing is playing: a day summary (“4 tasks · 17:00 Gym”) and a one-click focus button. | <img src="docs/screenshots/5-home-no-music.png" width="360"> |
-| **Pomodoro focus** — 25 min work, 5 min break, a long break after every fourth round. Start it from Home or from any task; the collapsed island shows a progress ring and a countdown, and notifications stay quiet until the break. | <img src="docs/screenshots/12-focus-home.png" width="360"><br><img src="docs/screenshots/12-focus-compact.png" width="360"> |
+| **Home** — clock, mini player, weather and a swipeable battery card: MacBook, AirPods (left / right / case), Magic Mouse, iPhone. When nothing is playing: a day summary (“4 tasks · 17:00 Gym”). | <img src="docs/screenshots/5-home-no-music.png" width="360"> |
+| **Timer tab** — *Pomodoro* (25 min work, 5 min break, a long break after every fourth round, optionally bound to a task; notifications stay quiet until the break), a regular *timer* with presets, and *alarms*. Running timers live in the collapsed island as a ring and a countdown. | <img src="docs/screenshots/12-focus-home.png" width="360"><br><img src="docs/screenshots/13-timer-countdown.png" width="360"><br><img src="docs/screenshots/13-timer-alarm.png" width="360"><br><img src="docs/screenshots/12-focus-compact.png" width="360"> |
 | **Tasks** — a one-week planner (Today, Tomorrow, …) with swipe between days, times, descriptions with clickable links, and a Gemini assistant that turns “gym at 5, call at 10” into tasks. | <img src="docs/screenshots/4-notes-tasks.png" width="360"> |
 | **Reminders** — 10 and 5 minutes before and exactly at the start of a timed task or calendar event, a card drops out of the notch with a soft synthesized chime. *Join* opens Zoom / Meet / Teams links, *+5 min* snoozes, *Done* checks the task off. | <img src="docs/screenshots/10-reminder.png" width="360"> |
-| **AirPods** — on connect, the island shows the earbuds and the case with charge rings, like on iPhone; click for the full sheet. AirPods Max supported. | <img src="docs/screenshots/8-airpods-compact.png" width="360"><br><img src="docs/screenshots/8-airpods.png" width="360"> |
+| **AirPods** — on connect, the island shows the earbuds and the case with charge rings, like on iPhone; click for the full sheet. On Home, earbuds and case get their own charge rows. AirPods Max supported. | <img src="docs/screenshots/8-airpods-compact.png" width="360"><br><img src="docs/screenshots/4-home-airpods.png" width="360"> |
 | **Music** — artwork with a glow sampled from the cover, scrubbing, repeat-one, quick switch between Apple Music, Spotify and YouTube Music. Live activity with an equalizer in the collapsed island. | <img src="docs/screenshots/4-music.png" width="360"> |
 | **Controls** — volume, brightness and a **per-app volume mixer** built on Core Audio process taps. | <img src="docs/screenshots/4-controls.png" width="360"> |
 | **Files** — a shelf to drop files on and drag them out again (AirDrop, Reveal in Finder, Copy Path). | <img src="docs/screenshots/4-shelf.png" width="360"> |
@@ -86,7 +86,7 @@ Sources/Notchly/
   App.swift, IslandModel.swift, NotchWindowController.swift   app entry, state machine, panel & mouse
   MediaController.swift, ScriptablePlayers.swift              now playing
   AppAudioMixer.swift, SystemControls.swift                   audio / brightness
-  Reminders.swift, Focus.swift                                reminders, calendar, chime, Pomodoro timer
+  Reminders.swift, Focus.swift, ClockTimers.swift             reminders, calendar, chime, Pomodoro, timer, alarms
   GmailClient.swift, SystemNotifications.swift, GeminiAssistant.swift
   Views/                                                      SwiftUI views
 MediaAdapter/                                                 dylib loaded into /usr/bin/perl
