@@ -1,0 +1,332 @@
+import AppKit
+import SwiftUI
+
+/// Состояние «Сейчас играет» для любого плеера: Apple Music, Spotify, Яндекс Музыка,
+/// YouTube Music (в браузере или десктоп-клиенте) и всё остальное, что публикует
+/// системный Now Playing. Основной источник — MediaRemote через perl-адаптер,
+/// запасной — AppleScript для Music и Spotify.
+final class MediaController: ObservableObject {
+    @Published private(set) var title = ""
+    @Published private(set) var artist = ""
+    @Published private(set) var album = ""
+    @Published private(set) var duration: Double = 0
+    @Published private(set) var elapsed: Double = 0
+    @Published private(set) var timestamp = Date()
+    @Published private(set) var isPlaying = false
+    @Published private(set) var artwork: NSImage?
+    @Published private(set) var accent: Color = .white
+    @Published private(set) var bundleID: String?
+    /// Показывать ли «живую активность» (обложка + эквалайзер) в свёрнутом острове.
+    @Published private(set) var showsLiveActivity = false
+
+    var onTrackChange: (() -> Void)?
+
+    var hasTrack: Bool { !title.isEmpty }
+    var trackID: String { "\(title)|\(artist)|\(album)" }
+
+    var sourceIcon: NSImage? {
+        guard let bundleID, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        return NSWorkspace.shared.icon(forFile: url.path)
+    }
+
+    func position(at date: Date = Date()) -> Double {
+        guard isPlaying else { return elapsed }
+        let value = elapsed + date.timeIntervalSince(timestamp)
+        return duration > 0 ? min(max(value, 0), duration) : max(value, 0)
+    }
+
+    // MARK: - Источники
+
+    private enum Source { case adapter, script(ScriptablePlayers.Player) }
+    private var source: Source = .adapter
+
+    private var process: Process?
+    private var input: FileHandle?
+    private var buffer = Data()
+    private var stopping = false
+    private var adapterFailures = 0
+    private var adapterAlive = false
+    private var adapterEmpty = true
+
+    private let scripts = ScriptablePlayers()
+    private var fallbackTimer: Timer?
+    private var liveActivityWork: DispatchWorkItem?
+    private var scriptArtworkTrack = ""
+
+    init() {
+        signal(SIGPIPE, SIG_IGN)
+        launchAdapter()
+        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.pollFallback()
+        }
+    }
+
+    func stop() {
+        stopping = true
+        process?.terminate()
+    }
+
+    // MARK: - Команды
+
+    func togglePlayPause() {
+        let now = Date()
+        elapsed = position(at: now)
+        timestamp = now
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { isPlaying.toggle() }
+        updateLiveActivity()
+        send("toggle", script: .playPause)
+    }
+
+    func next() { send("next", script: .next) }
+    func previous() { send("previous", script: .previous) }
+
+    func seek(to seconds: Double) {
+        elapsed = seconds
+        timestamp = Date()
+        send("seek \(seconds)", script: .seek(seconds))
+    }
+
+    func openSourceApp() {
+        guard let bundleID, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+    }
+
+    private func send(_ command: String, script: ScriptablePlayers.Command) {
+        switch source {
+        case .adapter:
+            try? input?.write(contentsOf: Data((command + "\n").utf8))
+        case .script(let player):
+            scripts.perform(script, on: player)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.pollFallback() }
+        }
+    }
+
+    // MARK: - MediaRemote-адаптер
+
+    private func launchAdapter() {
+        guard let res = Bundle.main.resourceURL else { return }
+        let script = res.appendingPathComponent("run.pl")
+        let lib = res.appendingPathComponent("libIslandMedia.dylib")
+        guard FileManager.default.fileExists(atPath: script.path),
+              FileManager.default.fileExists(atPath: lib.path) else {
+            NSLog("Media adapter not bundled; using AppleScript fallback only")
+            return
+        }
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        proc.arguments = [script.path, lib.path]
+        let out = Pipe(), inp = Pipe()
+        proc.standardOutput = out
+        proc.standardInput = inp
+        proc.standardError = FileHandle.nullDevice
+
+        out.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            DispatchQueue.main.async { self?.consume(chunk) }
+        }
+        proc.terminationHandler = { [weak self] _ in
+            DispatchQueue.main.async { self?.adapterTerminated() }
+        }
+
+        do {
+            try proc.run()
+            process = proc
+            input = inp.fileHandleForWriting
+        } catch {
+            NSLog("Failed to launch media adapter: \(error)")
+        }
+    }
+
+    private func adapterTerminated() {
+        adapterAlive = false
+        adapterEmpty = true
+        process = nil
+        input = nil
+        buffer.removeAll()
+        guard !stopping else { return }
+        adapterFailures += 1
+        guard adapterFailures < 6 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(adapterFailures)) { [weak self] in
+            self?.launchAdapter()
+        }
+    }
+
+    private func consume(_ chunk: Data) {
+        buffer.append(chunk)
+        while let newline = buffer.firstIndex(of: 0x0A) {
+            let line = buffer[buffer.startIndex..<newline]
+            buffer.removeSubrange(buffer.startIndex...newline)
+            guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
+            handleAdapter(obj)
+        }
+    }
+
+    private func handleAdapter(_ msg: [String: Any]) {
+        switch msg["type"] as? String {
+        case "ready":
+            adapterAlive = true
+            adapterFailures = 0
+        case "error":
+            adapterAlive = false
+        case "state":
+            adapterAlive = true
+            if msg["empty"] as? Bool == true || (msg["title"] as? String ?? "").isEmpty {
+                adapterEmpty = true
+                if case .adapter = source { clear() }
+                return
+            }
+            adapterEmpty = false
+            source = .adapter
+
+            let playing = msg["playing"] as? Bool ?? false
+            var elapsed = msg["elapsed"] as? Double ?? 0
+            var stamp = Date()
+            if let ts = msg["timestamp"] as? Double {
+                stamp = Date(timeIntervalSince1970: ts)
+            }
+            // Если плеер не присылает скорость, но играет, считаем её равной 1.
+            if let rate = msg["rate"] as? Double, rate == 0, playing {
+                elapsed += Date().timeIntervalSince(stamp)
+                stamp = Date()
+            }
+
+            var artwork: ArtworkUpdate = .keep
+            if msg["hasArtwork"] as? Bool == false {
+                artwork = .clear
+            } else if let b64 = msg["artwork"] as? String, let data = Data(base64Encoded: b64),
+                      let image = NSImage(data: data) {
+                artwork = .set(image)
+            }
+
+            apply(title: msg["title"] as? String ?? "",
+                  artist: msg["artist"] as? String ?? "",
+                  album: msg["album"] as? String ?? "",
+                  duration: msg["duration"] as? Double ?? 0,
+                  elapsed: elapsed, timestamp: stamp, playing: playing,
+                  bundleID: (msg["parentBundle"] as? String) ?? (msg["bundle"] as? String),
+                  artwork: artwork)
+        default:
+            break
+        }
+    }
+
+    // MARK: - AppleScript-фолбэк
+
+    private func pollFallback() {
+        guard !adapterAlive || adapterEmpty else { return }
+        guard let snap = scripts.poll() else {
+            if case .script = source { clear(); source = .adapter }
+            return
+        }
+        source = .script(snap.player)
+        var artwork: ArtworkUpdate = .keep
+        let key = "\(snap.title)|\(snap.artist)"
+        if key != scriptArtworkTrack {
+            scriptArtworkTrack = key
+            artwork = .clear
+            scripts.loadArtwork(for: snap.player) { [weak self] image in
+                guard let self, let image, self.scriptArtworkTrack == key else { return }
+                self.setArtwork(image)
+            }
+        }
+        apply(title: snap.title, artist: snap.artist, album: snap.album, duration: snap.duration,
+              elapsed: snap.position, timestamp: Date(), playing: snap.playing,
+              bundleID: snap.player.bundleID, artwork: artwork)
+    }
+
+    // MARK: - Применение состояния
+
+    /// Для рендера снапшотов: подставить трек вручную.
+    func debugSet(title: String, artist: String, album: String, duration: Double, elapsed: Double,
+                  playing: Bool, artwork: NSImage?, bundleID: String?) {
+        if title.isEmpty { clear(); showsLiveActivity = false; return }
+        apply(title: title, artist: artist, album: album, duration: duration, elapsed: elapsed,
+              timestamp: Date(), playing: playing, bundleID: bundleID,
+              artwork: artwork.map(ArtworkUpdate.set) ?? .clear)
+    }
+
+    private enum ArtworkUpdate { case keep, clear, set(NSImage) }
+
+    private func apply(title: String, artist: String, album: String, duration: Double,
+                       elapsed: Double, timestamp: Date, playing: Bool, bundleID: String?,
+                       artwork: ArtworkUpdate) {
+        let newID = "\(title)|\(artist)|\(album)"
+        let changed = newID != trackID
+
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+            self.title = title
+            self.artist = artist
+            self.album = album
+            self.duration = duration
+            self.elapsed = elapsed
+            self.timestamp = timestamp
+            self.isPlaying = playing
+            self.bundleID = bundleID
+        }
+        switch artwork {
+        case .keep: break
+        case .clear: setArtwork(nil)
+        case .set(let image): setArtwork(image)
+        }
+        updateLiveActivity()
+        if changed && !title.isEmpty { onTrackChange?() }
+    }
+
+    private func setArtwork(_ image: NSImage?) {
+        let color = image.flatMap(ArtworkColor.accent(of:)) ?? .white
+        withAnimation(.easeInOut(duration: 0.6)) {
+            artwork = image
+            accent = color
+        }
+    }
+
+    private func clear() {
+        guard hasTrack || isPlaying else { return }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+            title = ""; artist = ""; album = ""
+            duration = 0; elapsed = 0
+            isPlaying = false
+            bundleID = nil
+        }
+        setArtwork(nil)
+        updateLiveActivity()
+    }
+
+    /// После паузы остров ещё несколько секунд показывает трек, потом прячет его.
+    private func updateLiveActivity() {
+        liveActivityWork?.cancel()
+        if isPlaying && hasTrack {
+            if !showsLiveActivity { withAnimation(IslandMetrics.spring) { showsLiveActivity = true } }
+            return
+        }
+        guard showsLiveActivity else { return }
+        let work = DispatchWorkItem { [weak self] in
+            withAnimation(IslandMetrics.softSpring) { self?.showsLiveActivity = false }
+        }
+        liveActivityWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (hasTrack ? 6 : 0), execute: work)
+    }
+}
+
+// MARK: - Цвет обложки
+
+enum ArtworkColor {
+    /// Средний цвет обложки, подкрученный так, чтобы хорошо читаться на чёрном.
+    static func accent(of image: NSImage) -> Color? {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        var pixel = [UInt8](repeating: 0, count: 4)
+        guard let ctx = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .medium
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let base = NSColor(red: CGFloat(pixel[0]) / 255, green: CGFloat(pixel[1]) / 255,
+                           blue: CGFloat(pixel[2]) / 255, alpha: 1)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        base.usingColorSpace(.deviceRGB)?.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        let tuned = NSColor(hue: h, saturation: min(s * 1.35, 0.85), brightness: max(b, 0.78), alpha: 1)
+        return Color(nsColor: tuned)
+    }
+}
