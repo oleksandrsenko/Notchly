@@ -179,7 +179,7 @@ final class ClipboardMonitor: ObservableObject {
 
         let app = NSWorkspace.shared.frontmostApplication
         let bundleID = app?.bundleIdentifier ?? "unknown"
-        let name = app?.localizedName ?? "Неизвестно"
+        let name = app?.localizedName ?? L("Неизвестно")
         add(text: text, bundleID: bundleID, appName: name)
     }
 

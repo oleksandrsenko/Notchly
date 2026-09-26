@@ -32,18 +32,18 @@ struct Weather: Equatable {
 
     var summary: String {
         switch code {
-        case 0: return "Ясно"
-        case 1: return "Почти ясно"
-        case 2: return "С прояснениями"
-        case 3: return "Пасмурно"
-        case 45, 48: return "Туман"
-        case 51...57: return "Морось"
-        case 61...67: return "Дождь"
-        case 71...77: return "Снег"
-        case 80...82: return "Ливень"
-        case 85, 86: return "Снегопад"
-        case 95...99: return "Гроза"
-        default: return "Облачно"
+        case 0: return L("Ясно")
+        case 1: return L("Почти ясно")
+        case 2: return L("С прояснениями")
+        case 3: return L("Пасмурно")
+        case 45, 48: return L("Туман")
+        case 51...57: return L("Морось")
+        case 61...67: return L("Дождь")
+        case 71...77: return L("Снег")
+        case 80...82: return L("Ливень")
+        case 85, 86: return L("Снегопад")
+        case 95...99: return L("Гроза")
+        default: return L("Облачно")
         }
     }
 }
@@ -118,7 +118,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
         coordinate = loc.coordinate
-        CLGeocoder().reverseGeocodeLocation(loc, preferredLocale: Locale(identifier: "ru_RU")) { [weak self] marks, _ in
+        CLGeocoder().reverseGeocodeLocation(loc, preferredLocale: Loc.locale) { [weak self] marks, _ in
             self?.city = marks?.first?.locality
             self?.fetch(loc.coordinate)
         }

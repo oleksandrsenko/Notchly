@@ -47,6 +47,13 @@ final class AppSettings: ObservableObject {
     /// Брать и снимки, которые macOS сохраняет файлами (на рабочий стол). Спросит доступ к папке.
     @Published var screenshotFiles: Bool { didSet { store(screenshotFiles, "settings.screenshotFiles") } }
     @Published var menuBarIcon: Bool { didSet { store(menuBarIcon, "settings.menuBarIcon") } }
+    /// Язык интерфейса. Строки берутся через L(...), поэтому смена видна сразу.
+    @Published var language: AppLanguage {
+        didSet {
+            Loc.language = language
+            store(language.rawValue, "settings.language")
+        }
+    }
 
     private let persistent: Bool
 
@@ -72,6 +79,11 @@ final class AppSettings: ObservableObject {
         screenshots = bool("settings.screenshots", true)
         screenshotFiles = bool("settings.screenshotFiles", false)
         menuBarIcon = bool("settings.menuBarIcon", true)
+        // Снапшоты рендерятся на языке, заданном до создания модели (--lang).
+        language = persistent
+            ? (d.string(forKey: "settings.language").flatMap(AppLanguage.init(rawValue:)) ?? .system)
+            : Loc.language
+        Loc.language = language
     }
 
     /// Сохранённая раскладка могла появиться до новой вкладки — дописываем недостающие, убираем лишние.

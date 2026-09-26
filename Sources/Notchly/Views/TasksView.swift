@@ -58,7 +58,7 @@ struct TasksView: View {
     private func dayPage(_ offset: Int) -> some View {
         let items = store.tasks(forOffset: offset)
         if items.isEmpty {
-            Text(offset == 0 ? "Задач на сегодня нет" : "На \(TasksView.dayTitle(offset, lowercased: true)) задач нет")
+            Text(offset == 0 ? L("Задач на сегодня нет") : L("На %@ задач нет", "\(TasksView.dayTitle(offset, lowercased: true))"))
                 .font(.system(size: 11.5))
                 .foregroundStyle(.white.opacity(0.35))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -80,12 +80,12 @@ struct TasksView: View {
     /// «Сегодня», «Завтра», дальше — день недели и число: «Вс, 27».
     static func dayTitle(_ offset: Int, lowercased: Bool = false) -> String {
         switch offset {
-        case 0: return lowercased ? "сегодня" : "Сегодня"
-        case 1: return lowercased ? "завтра" : "Завтра"
+        case 0: return lowercased ? L("сегодня") : L("Сегодня")
+        case 1: return lowercased ? L("завтра") : L("Завтра")
         default:
             let f = DateFormatter()
-            f.locale = Locale(identifier: "ru_RU")
-            f.dateFormat = lowercased ? "d MMMM" : "EE, d"
+            f.locale = Loc.locale
+            f.dateFormat = lowercased ? (Loc.isRussian ? "d MMMM" : "MMMM d") : "EE, d"
             let text = f.string(from: TasksStore.date(forOffset: offset))
             return lowercased ? text : text.prefix(1).uppercased() + text.dropFirst()
         }
@@ -96,7 +96,7 @@ struct TasksView: View {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(draftFocused ? 0.8 : 0.35))
-            TextField(store.selectedDay == 0 ? "Новая задача" : "Задача на \(TasksView.dayTitle(store.selectedDay, lowercased: true))",
+            TextField(store.selectedDay == 0 ? L("Новая задача") : L("Задача на %@", "\(TasksView.dayTitle(store.selectedDay, lowercased: true))"),
                       text: $draft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
@@ -173,7 +173,7 @@ private struct TaskRow: View {
                         editing = true
                         DispatchQueue.main.async { focused = true }
                     }
-                    .help("Нажмите, чтобы исправить")
+                    .help(L("Нажмите, чтобы исправить"))
             }
             Spacer(minLength: 4)
             // Таймер — начать фокус «Помидор» над этой задачей.
@@ -186,7 +186,7 @@ private struct TaskRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(PressableStyle())
-                .help("Фокус 25 минут над этой задачей")
+                .help(L("Фокус 25 минут над этой задачей"))
                 .transition(.opacity)
             }
             // Стрелочка вниз — описание задачи. Если описание уже есть, она видна всегда.
@@ -199,7 +199,7 @@ private struct TaskRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(PressableStyle())
-                .help(task.notes == nil ? "Добавить описание" : "Открыть описание")
+                .help(task.notes == nil ? L("Добавить описание") : L("Открыть описание"))
                 .transition(.opacity)
             }
             ZStack(alignment: .trailing) {
@@ -222,7 +222,7 @@ private struct TaskRow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("Удалить задачу")
+                    .help(L("Удалить задачу"))
                     .transition(.opacity)
                 }
             }
@@ -260,7 +260,7 @@ private struct TaskDetailView: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(PressableStyle())
-                .help("Свернуть описание")
+                .help(L("Свернуть описание"))
 
                 Text(task.text)
                     .font(.system(size: 13.5, weight: .semibold))
@@ -277,7 +277,7 @@ private struct TaskDetailView: View {
                 }
                 Spacer(minLength: 6)
                 Button { focus.start(taskID: task.id, title: task.text) } label: {
-                    Label("Фокус", systemImage: "timer")
+                    Label(L("Фокус"), systemImage: "timer")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .padding(.horizontal, 9)
@@ -286,11 +286,11 @@ private struct TaskDetailView: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableStyle())
-                .help("Фокус 25 минут над этой задачей")
+                .help(L("Фокус 25 минут над этой задачей"))
                 // Ссылки из описания — одним нажатием.
                 ForEach(Array(TaskItem.links(in: text).prefix(3).enumerated()), id: \.offset) { _, url in
                     Button { NSWorkspace.shared.open(url) } label: {
-                        Label(url.host?.replacingOccurrences(of: "www.", with: "") ?? "Ссылка", systemImage: "link")
+                        Label(url.host?.replacingOccurrences(of: "www.", with: "") ?? L("Ссылка"), systemImage: "link")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.black)
                             .lineLimit(1)
@@ -311,7 +311,7 @@ private struct TaskDetailView: View {
                     store.updateNotes(task.id, value)
                 }
                 if text.isEmpty {
-                    Text("Описание: что сделать, ссылка на урок, заметки…")
+                    Text(L("Описание: что сделать, ссылка на урок, заметки…"))
                         .font(.system(size: 12.5))
                         .foregroundStyle(.white.opacity(0.3))
                         .padding(.horizontal, 9)
@@ -409,7 +409,7 @@ private struct GeminiPanel: View {
                 Spacer()
                 if gemini.hasKey {
                     Menu {
-                        Button("Удалить ключ API", role: .destructive) { gemini.removeKey() }
+                        Button(L("Удалить ключ API"), role: .destructive) { gemini.removeKey() }
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 11, weight: .semibold))
@@ -434,13 +434,13 @@ private struct GeminiPanel: View {
                 if let error = gemini.error {
                     Text(error).foregroundStyle(.red.opacity(0.85))
                 } else if gemini.isThinking {
-                    Text("Думаю…").foregroundStyle(.white.opacity(0.45))
+                    Text(L("Думаю…")).foregroundStyle(.white.opacity(0.45))
                 } else if let reply = gemini.reply {
                     Text(reply).foregroundStyle(.white.opacity(0.85))
                 } else if added > 0 {
-                    Text("Добавлено задач: \(added)").foregroundStyle(.green.opacity(0.85))
+                    Text(L("Добавлено задач: %@", "\(added)")).foregroundStyle(.green.opacity(0.85))
                 } else {
-                    Text("Расскажите о планах: «сегодня в 5 спортзал, в 10 созвон» — разложу по задачам.")
+                    Text(L("Расскажите о планах: «сегодня в 5 спортзал, в 10 созвон» — разложу по задачам."))
                         .foregroundStyle(.white.opacity(0.4))
                 }
             }
@@ -450,7 +450,7 @@ private struct GeminiPanel: View {
             .animation(.easeOut(duration: 0.2), value: gemini.isThinking)
 
             HStack(spacing: 6) {
-                TextField("Спросить Gemini", text: $prompt)
+                TextField(L("Спросить Gemini"), text: $prompt)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11.5))
                     .onSubmit(send)
@@ -473,17 +473,17 @@ private struct GeminiPanel: View {
 
     private var keyForm: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Вставьте ключ API из Google AI Studio. Он хранится в Связке ключей.")
+            Text(L("Вставьте ключ API из Google AI Studio. Он хранится в Связке ключей."))
                 .font(.system(size: 10.5))
                 .foregroundStyle(.white.opacity(0.45))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             HStack(spacing: 6) {
-                SecureField("Ключ API", text: $key)
+                SecureField(L("Ключ API"), text: $key)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11.5))
                     .onSubmit(saveKey)
-                Button("Сохранить", action: saveKey)
+                Button(L("Сохранить"), action: saveKey)
                     .buttonStyle(.plain)
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(key.isEmpty ? .white.opacity(0.3) : .green)
@@ -492,7 +492,7 @@ private struct GeminiPanel: View {
             .padding(.horizontal, 9)
             .frame(height: 26)
             .background(Capsule().fill(.white.opacity(0.08)))
-            Button("Получить ключ →") {
+            Button(L("Получить ключ →")) {
                 NSWorkspace.shared.open(URL(string: "https://aistudio.google.com/apikey")!)
             }
             .buttonStyle(.plain)

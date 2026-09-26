@@ -76,7 +76,7 @@ struct MusicPlayerView: View {
                     IconButton(systemName: "repeat.1", size: 12, padding: 6) { media.toggleRepeat() }
                         .foregroundStyle(.white)
                         .opacity(media.repeatOne ? 0.95 : 0.35)
-                        .help(media.repeatOne ? "Повтор трека включён" : "Повторять этот трек")
+                        .help(media.repeatOne ? L("Повтор трека включён") : L("Повторять этот трек"))
                 }
             }
 
@@ -174,7 +174,7 @@ private struct ServiceColumn: View {
         VStack(spacing: 6) {
             ForEach(MusicService.all) { service in
                 ServiceButton(service: service, iconSize: 26, showsName: false)
-                    .help(service.appURL == nil ? "Открыть \(service.name) в браузере" : "Открыть \(service.name)")
+                    .help(service.appURL == nil ? L("Открыть %@ в браузере", "\(service.name)") : L("Открыть %@", "\(service.name)"))
             }
         }
         .padding(.vertical, 2)
@@ -186,9 +186,9 @@ private struct EmptyPlayerView: View {
     var body: some View {
         VStack(spacing: 14) {
             VStack(spacing: 3) {
-                Text("Сейчас ничего не играет")
+                Text(L("Сейчас ничего не играет"))
                     .font(.system(size: 15, weight: .semibold))
-                Text("Включите музыку — обложка и управление появятся здесь")
+                Text(L("Включите музыку — обложка и управление появятся здесь"))
                     .font(.system(size: 11.5))
                     .foregroundStyle(.white.opacity(0.5))
             }

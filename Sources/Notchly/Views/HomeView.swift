@@ -49,7 +49,7 @@ private struct HomeLeftColumn: View {
                     .font(.system(size: 44, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.white)
-                Text(ctx.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "ru_RU"))).capitalizedFirst)
+                Text(ctx.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Loc.locale)).capitalizedFirst)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
                 if media.hasTrack {
@@ -81,7 +81,8 @@ private struct HomeLeftColumn: View {
             if next == nil || time < next!.time { next = (time, event.title) }
         }
         let count = open.count
-        let head = count == 0 ? "Задач на сегодня нет" : "\(count) \(Self.plural(count))"
+        let head = count == 0 ? L("Задач на сегодня нет")
+            : "\(count) " + Loc.plural(count, "задача", "задачи", "задач", en: "task", enPlural: "tasks")
         return HStack(spacing: 4) {
             Text(head)
             if let next {
@@ -96,12 +97,6 @@ private struct HomeLeftColumn: View {
         .frame(maxWidth: 196)
     }
 
-    private static func plural(_ n: Int) -> String {
-        let mod10 = n % 10, mod100 = n % 100
-        if mod10 == 1 && mod100 != 11 { return "задача" }
-        if (2...4).contains(mod10) && !(12...14).contains(mod100) { return "задачи" }
-        return "задач"
-    }
 
     @ViewBuilder
     private var nowPlayingChip: some View {
@@ -196,7 +191,7 @@ private struct WeatherCard: View {
                     .lineLimit(1)
             } else {
                 ProgressView().controlSize(.small)
-                Text("Погода загружается…")
+                Text(L("Погода загружается…"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.45))
             }
@@ -210,8 +205,8 @@ private struct WeatherCard: View {
             if service.canAskForPreciseLocation { service.askForPreciseLocation() }
             else if let w = service.weather { NSWorkspace.shared.open(w.forecastURL) }
         }
-        .help(service.canAskForPreciseLocation ? "Нажмите, чтобы уточнить город по геолокации"
-                                                : "Открыть прогноз погоды на несколько дней")
+        .help(service.canAskForPreciseLocation ? L("Нажмите, чтобы уточнить город по геолокации")
+                                                : L("Открыть прогноз погоды на несколько дней"))
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(LinearGradient(colors: [Color(white: 0.16), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)))
@@ -308,7 +303,7 @@ private struct BatteryCarousel: View {
             }
             .frame(width: 60)
             info(title: "MacBook", percent: mac?.percent, charging: mac?.charging == true,
-                 note: mac?.charging == true ? "Заряжается" : nil)
+                 note: mac?.charging == true ? L("Заряжается") : nil)
         }
         .padding(.horizontal, 14)
         .animation(.smooth(duration: 0.4), value: mac?.charging)
@@ -328,7 +323,7 @@ private struct BatteryCarousel: View {
 
     private func phonePage(_ phone: PhoneBattery) -> some View {
         let minutes = Int(Date().timeIntervalSince(phone.updated) / 60)
-        let age = minutes < 1 ? "только что" : minutes < 60 ? "\(minutes) мин назад" : "\(minutes / 60) ч назад"
+        let age = minutes < 1 ? L("только что") : minutes < 60 ? L("%@ мин назад", "\(minutes)") : L("%@ ч назад", "\(minutes / 60)")
         return HStack(spacing: 12) {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: "iphone")
@@ -342,7 +337,7 @@ private struct BatteryCarousel: View {
                 }
             }
             .frame(width: 60)
-            info(title: "iPhone", percent: phone.percent, charging: phone.charging, note: phone.charging ? "Заряжается · \(age)" : age)
+            info(title: "iPhone", percent: phone.percent, charging: phone.charging, note: phone.charging ? L("Заряжается · %@", "\(age)") : age)
         }
         .padding(.horizontal, 14)
     }
@@ -365,21 +360,21 @@ private struct BatteryCarousel: View {
                         .lineLimit(1)
                     if let bud = pair.min(by: { $0.percent < $1.percent }) {
                         let help = left != nil && right != nil
-                            ? "Левый \(left!.percent)% · правый \(right!.percent)%" : "Наушники"
+                            ? L("Левый %@%% · правый %@%%", "\(left!.percent)", "\(right!.percent)") : L("Наушники")
                         levelRow(bud.percent, charging: pair.contains(where: \.charging), symbol: device.symbol)
                             .help(help)
                     }
                     if let casing {
                         levelRow(casing.percent, charging: casing.charging,
                                  symbol: casing.symbol.isEmpty ? "airpodspro.chargingcase.wireless.fill" : casing.symbol)
-                            .help("Кейс")
+                            .help(L("Кейс"))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 // AirPods Max и прочие наушники: один процент, а если система его не сообщила — просто «Подключены».
                 let level = device.primaryLevel
-                info(title: name, percent: level?.percent, note: level == nil ? "Подключены" : nil,
+                info(title: name, percent: level?.percent, note: level == nil ? L("Подключены") : nil,
                      monochrome: true)
             }
         }

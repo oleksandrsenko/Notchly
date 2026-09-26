@@ -13,6 +13,7 @@ cp "$BIN/Notchly" "$APP/Contents/MacOS/Notchly"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp MediaAdapter/run.pl "$APP/Contents/Resources/run.pl"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp -R Resources/en.lproj "$APP/Contents/Resources/"
 
 clang -fobjc-arc -dynamiclib -O2 -arch arm64 -arch arm64e -arch x86_64 \
     -mmacosx-version-min=14.0 -framework Foundation \

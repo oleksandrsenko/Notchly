@@ -217,7 +217,7 @@ final class SystemNotificationsReader: ObservableObject {
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            return .failed("Не удалось прочитать базу уведомлений: \(String(cString: sqlite3_errmsg(db)))")
+            return .failed(L("Не удалось прочитать базу уведомлений: %@", "\(String(cString: sqlite3_errmsg(db)))"))
         }
         defer { sqlite3_finalize(stmt) }
 

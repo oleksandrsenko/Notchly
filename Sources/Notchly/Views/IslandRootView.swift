@@ -50,6 +50,8 @@ struct IslandRootView: View {
                 .frame(width: size.width, height: size.height)
                 .shadow(color: .black.opacity(model.isExpanded || model.event != nil ? 0.5 : 0), radius: 16, y: 6)
             content
+                // Смена языка пересобирает содержимое целиком — все строки берутся заново.
+                .id(model.settings.language)
                 .frame(width: IslandMetrics.windowSize.width, height: IslandMetrics.windowSize.height, alignment: .top)
                 .mask(alignment: .top) {
                     shape.frame(width: size.width, height: size.height)

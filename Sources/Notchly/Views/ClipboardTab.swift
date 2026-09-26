@@ -22,7 +22,7 @@ struct ClipboardTab: View {
                 ForEach([Mode.history, .shots], id: \.self) { item in
                     Button { switchTo(item) } label: {
                         HStack(spacing: 5) {
-                            Text(item.rawValue)
+                            Text(L(item.rawValue))
                             if item == .shots && !shots.items.isEmpty {
                                 Text("\(shots.items.count)")
                                     .font(.system(size: 9.5, weight: .bold, design: .rounded))
@@ -44,7 +44,7 @@ struct ClipboardTab: View {
                     .buttonStyle(PressableStyle())
                 }
                 Button { switchTo(mode == .vault ? .history : .vault) } label: {
-                    Label("API-ключи", systemImage: vault.isUnlocked ? "lock.open.fill" : "lock.fill")
+                    Label(L("API-ключи"), systemImage: vault.isUnlocked ? "lock.open.fill" : "lock.fill")
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(mode == .vault ? .black : .yellow.opacity(0.9))
                         .padding(.horizontal, 10)
@@ -63,7 +63,7 @@ struct ClipboardTab: View {
                     Text("\(ByteCountFormatter.string(fromByteCount: Int64(shots.totalBytes), countStyle: .file)) · \(Self.daysText(shots.retentionDays))")
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(.white.opacity(0.4))
-                        .help("Снимки удаляются сами через этот срок. Изменить — в настройках Notchly.")
+                        .help(L("Снимки удаляются сами через этот срок. Изменить — в настройках Notchly."))
                     ConfirmClearButton { shots.clear() }.transition(.blurFade)
                 default:
                     EmptyView()
@@ -76,7 +76,7 @@ struct ClipboardTab: View {
                     if settings.clipboardHistory || !clipboard.groups.isEmpty {
                         ClipboardView(clipboard: clipboard).transition(.pageSlide(direction))
                     } else {
-                        DisabledNote(text: "История буфера выключена в настройках").transition(.pageSlide(direction))
+                        DisabledNote(text: L("История буфера выключена в настройках")).transition(.pageSlide(direction))
                     }
                 case .shots:
                     ScreenshotGrid(clipboard: clipboard, shots: shots, settings: settings).transition(.pageSlide(direction))
@@ -90,11 +90,7 @@ struct ClipboardTab: View {
     }
 
     static func daysText(_ days: Int) -> String {
-        switch days {
-        case 1: return "хранятся 1 день"
-        case 2, 3, 4: return "хранятся \(days) дня"
-        default: return "хранятся \(days) дней"
-        }
+        Loc.pick("хранятся", "kept") + " \(days) " + ScreenshotGrid.days(days)
     }
 
     private func switchTo(_ item: Mode) {
@@ -122,7 +118,7 @@ struct ConfirmClearButton: View {
                 }
             }
         } label: {
-            Text(armed ? "Точно очистить?" : "Очистить")
+            Text(armed ? L("Точно очистить?") : L("Очистить"))
                 .font(.system(size: 11.5, weight: armed ? .semibold : .medium))
                 .foregroundStyle(armed ? .white : .white.opacity(0.55))
                 .padding(.horizontal, armed ? 10 : 0)
@@ -155,17 +151,17 @@ private struct ScreenshotGrid: View {
 
     var body: some View {
         if !settings.screenshots && shots.items.isEmpty {
-            DisabledNote(text: "Снимки выключены в настройках")
+            DisabledNote(text: L("Снимки выключены в настройках"))
         } else if shots.items.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "camera.viewfinder")
                     .font(.system(size: 22, weight: .medium))
-                Text("Снимок в буфер (⌃⇧⌘4) или скопированная картинка появится здесь на \(shots.retentionDays) \(Self.days(shots.retentionDays))")
+                Text(L("Снимок в буфер (⌃⇧⌘4) или скопированная картинка появится здесь на %@ %@", "\(shots.retentionDays)", "\(Self.days(shots.retentionDays))"))
                     .font(.system(size: 11.5))
                     .multilineTextAlignment(.center)
                 if !settings.screenshotFiles {
                     Button { settings.screenshotFiles = true } label: {
-                        Text("Брать и снимки с рабочего стола")
+                        Text(L("Брать и снимки с рабочего стола"))
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.black)
                             .padding(.horizontal, 12)
@@ -173,7 +169,7 @@ private struct ScreenshotGrid: View {
                             .background(Capsule().fill(.white))
                     }
                     .buttonStyle(PressableStyle())
-                    .help("macOS один раз спросит доступ к папке со снимками")
+                    .help(L("macOS один раз спросит доступ к папке со снимками"))
                 }
             }
             .foregroundStyle(.white.opacity(0.45))
@@ -197,7 +193,7 @@ private struct ScreenshotGrid: View {
     }
 
     static func days(_ n: Int) -> String {
-        n == 1 ? "день" : (2...4).contains(n) ? "дня" : "дней"
+        Loc.plural(n, "день", "дня", "дней", en: "day", enPlural: "days")
     }
 
     private func copy(_ shot: Screenshot) {
@@ -235,7 +231,7 @@ private struct ShotCell: View {
                 }
                 if copied {
                     RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.black.opacity(0.55))
-                    Label("Скопировано", systemImage: "checkmark")
+                    Label(L("Скопировано"), systemImage: "checkmark")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.green)
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
@@ -243,9 +239,9 @@ private struct ShotCell: View {
                     VStack {
                         HStack(spacing: 4) {
                             Spacer()
-                            chip("pencil", help: "Переименовать") { renaming = true }
-                            chip("square.and.arrow.down", help: "Сохранить копию…", action: onSave)
-                            chip("xmark", help: "Удалить", action: onDelete)
+                            chip("pencil", help: L("Переименовать")) { renaming = true }
+                            chip("square.and.arrow.down", help: L("Сохранить копию…"), action: onSave)
+                            chip("xmark", help: L("Удалить"), action: onDelete)
                         }
                         Spacer()
                     }
@@ -263,7 +259,7 @@ private struct ShotCell: View {
 
             Group {
                 if renaming {
-                    InlineRenameField(initial: shot.title ?? "", placeholder: "Название") { value in
+                    InlineRenameField(initial: shot.title ?? "", placeholder: L("Название")) { value in
                         guard renaming else { return }
                         renaming = false
                         onRename(value)
@@ -275,12 +271,12 @@ private struct ShotCell: View {
                     Text(title)
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
-                        .help("\(title) · \(shortTimestamp(shot.date)). Нажмите, чтобы переименовать")
+                        .help(L("%@ · %@. Нажмите, чтобы переименовать", "\(title)", "\(shortTimestamp(shot.date))"))
                 } else {
                     Text(shortTimestamp(shot.date))
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.45))
-                        .help("Нажмите, чтобы дать название")
+                        .help(L("Нажмите, чтобы дать название"))
                 }
             }
             .font(.system(size: 10.5, weight: .medium, design: .rounded))
@@ -289,14 +285,14 @@ private struct ShotCell: View {
             .onTapGesture { if !renaming { renaming = true } }
         }
         .contextMenu {
-            Button("Скопировать", action: onCopy)
-            Button("Переименовать…") { renaming = true }
-            Button("Сохранить копию…", action: onSave)
+            Button(L("Скопировать"), action: onCopy)
+            Button(L("Переименовать…")) { renaming = true }
+            Button(L("Сохранить копию…"), action: onSave)
             Divider()
-            Button("Удалить", role: .destructive, action: onDelete)
+            Button(L("Удалить"), role: .destructive, action: onDelete)
         }
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
-        .help("Нажмите — скопировать, перетащите — вставить в другое приложение")
+        .help(L("Нажмите — скопировать, перетащите — вставить в другое приложение"))
     }
 
     private func chip(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {

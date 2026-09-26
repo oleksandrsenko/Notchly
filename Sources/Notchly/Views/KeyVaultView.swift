@@ -32,9 +32,9 @@ private struct LockedVault: View {
                     .background(Circle().fill(.white.opacity(0.08)))
             }
             .buttonStyle(PressableStyle())
-            Text("API-ключи защищены")
+            Text(L("API-ключи защищены"))
                 .font(.system(size: 12.5, weight: .semibold))
-            Text(vault.authError ?? "Нажмите и подтвердите Touch ID или паролем Mac")
+            Text(vault.authError ?? L("Нажмите и подтвердите Touch ID или паролем Mac"))
                 .font(.system(size: 11))
                 .foregroundStyle(vault.authError == nil ? .white.opacity(0.45) : .red.opacity(0.85))
         }
@@ -63,7 +63,7 @@ private struct UnlockedVault: View {
                     Image(systemName: "key.horizontal")
                         .font(.system(size: 20))
                         .foregroundStyle(.white.opacity(0.4))
-                    Text("Ключей пока нет")
+                    Text(L("Ключей пока нет"))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.45))
                     addButton
@@ -79,11 +79,11 @@ private struct UnlockedVault: View {
                 }
                 if !adding {
                     HStack {
-                        Label("Разблокировано", systemImage: "lock.open.fill")
+                        Label(L("Разблокировано"), systemImage: "lock.open.fill")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.green.opacity(0.8))
                         Spacer()
-                        Button("Заблокировать") { vault.lock() }
+                        Button(L("Заблокировать")) { vault.lock() }
                             .buttonStyle(.plain)
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(.white.opacity(0.5))
@@ -98,7 +98,7 @@ private struct UnlockedVault: View {
         Button {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { adding = true }
         } label: {
-            Label("Добавить", systemImage: "plus")
+            Label(L("Добавить"), systemImage: "plus")
                 .font(.system(size: 10.5, weight: .semibold))
                 .padding(.horizontal, 9)
                 .frame(height: 22)
@@ -109,17 +109,17 @@ private struct UnlockedVault: View {
 
     private var addForm: some View {
         HStack(spacing: 6) {
-            TextField("Название", text: $name)
+            TextField(L("Название"), text: $name)
                 .frame(width: 120)
-            SecureField("Ключ", text: $value)
+            SecureField(L("Ключ"), text: $value)
             Button {
                 value = NSPasteboard.general.string(forType: .string) ?? value
             } label: {
                 Image(systemName: "doc.on.clipboard")
             }
             .buttonStyle(.plain)
-            .help("Вставить из буфера обмена")
-            Button("Сохранить") {
+            .help(L("Вставить из буфера обмена"))
+            Button(L("Сохранить")) {
                 vault.add(name: name, value: value)
                 name = ""; value = ""
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { adding = false }
@@ -179,7 +179,7 @@ private struct UnlockedVault: View {
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
-            .help("Скопировать ключ")
+            .help(L("Скопировать ключ"))
             Button { vault.delete(key) } label: { Image(systemName: "trash") }
                 .buttonStyle(.plain)
                 .foregroundStyle(.white.opacity(0.35))

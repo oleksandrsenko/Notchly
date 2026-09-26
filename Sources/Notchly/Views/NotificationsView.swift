@@ -33,11 +33,11 @@ struct NotificationsView: View {
                 }
                 if !appGroups.isEmpty {
                     HStack {
-                        Text("Приложения")
+                        Text(L("Приложения"))
                             .font(.system(size: 10.5, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.4))
                         Spacer()
-                        Button("Очистить всё") {
+                        Button(L("Очистить всё")) {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) { system.dismissAll() }
                         }
                         .buttonStyle(.plain)
@@ -52,7 +52,7 @@ struct NotificationsView: View {
                         .transition(.opacity.combined(with: .offset(y: -6)))
                 }
                 if !system.needsFullDiskAccess && appGroups.isEmpty && gmail.mails.isEmpty && gmail.isConnected {
-                    Text("Новых уведомлений нет")
+                    Text(L("Новых уведомлений нет"))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.4))
                         .padding(.top, 20)
@@ -73,7 +73,7 @@ struct NotificationsView: View {
         VStack(spacing: 2) {
             GroupHeader(icon: .store("com.google.Gmail", fallback: "envelope.fill"),
                         title: "Gmail",
-                        subtitle: gmail.account ?? "Не подключено",
+                        subtitle: gmail.account ?? L("Не подключено"),
                         count: gmail.mails.count,
                         latest: gmail.mails.first?.date,
                         isExpanded: expanded == "gmail") { toggle("gmail") }
@@ -85,16 +85,16 @@ struct NotificationsView: View {
                                 MailRow(mail: mail) { gmail.open(mail) }
                             }
                             if gmail.mails.isEmpty {
-                                Text("Непрочитанных писем нет")
+                                Text(L("Непрочитанных писем нет"))
                                     .font(.system(size: 11))
                                     .foregroundStyle(.white.opacity(0.4))
                                     .padding(.vertical, 6)
                             }
                             HStack(spacing: 14) {
-                                Button("Открыть Gmail") { gmail.openInbox() }
-                                Button("Обновить") { gmail.refresh() }
+                                Button(L("Открыть Gmail")) { gmail.openInbox() }
+                                Button(L("Обновить")) { gmail.refresh() }
                                 Spacer()
-                                Button("Отключить") { gmail.disconnect() }
+                                Button(L("Отключить")) { gmail.disconnect() }
                                     .foregroundStyle(.red.opacity(0.7))
                             }
                             .buttonStyle(.plain)
@@ -122,7 +122,7 @@ struct NotificationsView: View {
                             subtitle: group.items.first.map { $0.title } ?? "",
                             count: group.items.count, latest: group.items.first?.date,
                             isExpanded: expanded == group.id) { toggle(group.id) }
-                DismissButton(help: "Удалить все уведомления \(appName(group.bundleID))") {
+                DismissButton(help: L("Удалить все уведомления %@", "\(appName(group.bundleID))")) {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
                         system.dismissAll(bundleID: group.bundleID)
                     }
@@ -150,14 +150,14 @@ struct NotificationsView: View {
                 .foregroundStyle(.orange)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Telegram, WhatsApp и другие приложения")
+                Text(L("Telegram, WhatsApp и другие приложения"))
                     .font(.system(size: 11.5, weight: .semibold))
-                Text("Нужен «Полный доступ к диску». Уже выдан? Удалите Notchly из списка и добавьте снова")
+                Text(L("Нужен «Полный доступ к диску». Уже выдан? Удалите Notchly из списка и добавьте снова"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.5))
             }
             Spacer()
-            Button("Открыть настройки") { system.openFullDiskAccessSettings() }
+            Button(L("Открыть настройки")) { system.openFullDiskAccessSettings() }
                 .buttonStyle(.plain)
                 .font(.system(size: 10.5, weight: .semibold))
                 .padding(.horizontal, 9)
@@ -301,7 +301,7 @@ private struct MailRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Открыть письмо в Gmail")
+        .help(L("Открыть письмо в Gmail"))
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
     }
 }
@@ -343,7 +343,7 @@ private struct AppNotificationRow: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help("Удалить уведомление")
+                        .help(L("Удалить уведомление"))
                         .transition(.opacity)
                     }
                 }
@@ -369,14 +369,14 @@ private struct GmailConnectForm: View {
                 TextField("you@gmail.com", text: $email)
                     .frame(width: 170)
                     .onAppear { if email.isEmpty, let account = gmail.account { email = account } }
-                SecureField("Пароль приложения", text: $password)
+                SecureField(L("Пароль приложения"), text: $password)
                 Button {
                     gmail.connect(email: email, appPassword: password)
                 } label: {
                     if gmail.isLoading {
                         ProgressView().controlSize(.small)
                     } else {
-                        Text("Подключить").font(.system(size: 11, weight: .semibold))
+                        Text(L("Подключить")).font(.system(size: 11, weight: .semibold))
                     }
                 }
                 .buttonStyle(.plain)
@@ -393,10 +393,10 @@ private struct GmailConnectForm: View {
                 if let error = gmail.error {
                     Text(error).foregroundStyle(.red.opacity(0.85))
                 } else {
-                    Text("Нужен пароль приложения Google, не основной пароль.")
+                    Text(L("Нужен пароль приложения Google, не основной пароль."))
                         .foregroundStyle(.white.opacity(0.45))
                 }
-                Button("Создать →") {
+                Button(L("Создать →")) {
                     NSWorkspace.shared.open(URL(string: "https://myaccount.google.com/apppasswords")!)
                 }
                 .buttonStyle(.plain)

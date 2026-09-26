@@ -13,15 +13,15 @@ struct ControlsView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 22) {
             VStack(spacing: 14) {
-                row(title: "Громкость", available: volume.isAvailable,
-                    hint: "Устройство вывода не поддерживает регулировку") {
+                row(title: L("Громкость"), available: volume.isAvailable,
+                    hint: L("Устройство вывода не поддерживает регулировку")) {
                     CapsuleSlider(value: volume.isMuted ? 0 : Double(volume.volume),
                                   icon: volumeIcon,
                                   iconAction: { volume.toggleMute() },
                                   onChange: { volume.set(Float($0)) })
                 }
-                row(title: "Яркость", available: brightness.isAvailable,
-                    hint: "Недоступно для этого дисплея") {
+                row(title: L("Яркость"), available: brightness.isAvailable,
+                    hint: L("Недоступно для этого дисплея")) {
                     CapsuleSlider(value: Double(brightness.brightness),
                                   icon: brightness.brightness < 0.33 ? "sun.min.fill" : "sun.max.fill",
                                   onChange: { brightness.set(Float($0)) })
@@ -76,12 +76,12 @@ private struct AppMixerList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                sectionTitle("Приложения")
+                sectionTitle(L("Приложения"))
                 Spacer()
                 // Настройки Notchly открываются отдельным окном, а остров остаётся раскрытым —
                 // так изменения видно сразу.
                 Button(action: openSettings) {
-                    Label("Настройки", systemImage: "gearshape.fill")
+                    Label(L("Настройки"), systemImage: "gearshape.fill")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
                         .padding(.horizontal, 9)
@@ -91,17 +91,17 @@ private struct AppMixerList: View {
                 }
                 .buttonStyle(PressableStyle())
                 .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
-                .help("Настройки Notchly: вкладки, функции, уведомления, буфер обмена")
+                .help(L("Настройки Notchly: вкладки, функции, уведомления, буфер обмена"))
             }
             if mixer.access == .denied {
                 notice(icon: "waveform.badge.exclamationmark",
-                       text: "Разрешите запись системного аудио, чтобы менять громкость приложений",
-                       button: "Открыть настройки") { mixer.openPrivacySettings() }
+                       text: L("Разрешите запись системного аудио, чтобы менять громкость приложений"),
+                       button: L("Открыть настройки")) { mixer.openPrivacySettings() }
             } else if mixer.access == .unsupported {
                 notice(icon: "waveform.slash",
-                       text: "Нужна macOS 14.2 или новее", button: nil) {}
+                       text: L("Нужна macOS 14.2 или новее"), button: nil) {}
             } else if mixer.apps.isEmpty {
-                notice(icon: "speaker.zzz.fill", text: "Сейчас ничего не играет", button: nil) {}
+                notice(icon: "speaker.zzz.fill", text: L("Сейчас ничего не играет"), button: nil) {}
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 7) {

@@ -18,8 +18,8 @@ struct Reminder: Equatable {
     func subtitle(now: Date = Date()) -> String {
         let minutes = Int((date.timeIntervalSince(now) / 60).rounded())
         let time = date.formatted(date: .omitted, time: .shortened)
-        if minutes >= 1 { return "Через \(minutes) мин · \(time)" }
-        return minutes > -2 ? "Начинается сейчас · \(time)" : "Началось в \(time)"
+        if minutes >= 1 { return L("Через %@ мин · %@", "\(minutes)", "\(time)") }
+        return minutes > -2 ? L("Начинается сейчас · %@", "\(time)") : L("Началось в %@", "\(time)")
     }
 }
 
@@ -152,7 +152,7 @@ final class CalendarService: ObservableObject {
         let events = store.events(matching: predicate)
             .filter { !$0.isAllDay && $0.status != .canceled }
             .map { Event(id: $0.calendarItemIdentifier + "@\(Int($0.startDate.timeIntervalSince1970))",
-                         title: $0.title ?? "Событие", start: $0.startDate, link: Self.meetingLink(in: $0)) }
+                         title: $0.title ?? L("Событие"), start: $0.startDate, link: Self.meetingLink(in: $0)) }
             .sorted { $0.start < $1.start }
         if events != upcoming { upcoming = events }
     }

@@ -6,8 +6,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: NotchWindowController?
     private var statusItem: NSStatusItem?
     private var menuBarObserver: AnyCancellable?
+    private var languageObserver: AnyCancellable?
 
     static func main() {
+        // --lang en: снапшоты на английском (для README).
+        if let i = CommandLine.arguments.firstIndex(of: "--lang"), i + 1 < CommandLine.arguments.count,
+           let language = AppLanguage(rawValue: CommandLine.arguments[i + 1]) {
+            Loc.language = language
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshots"), i + 1 < CommandLine.arguments.count {
             MainActor.assumeIsolated {
                 Snapshots.render(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
@@ -121,6 +127,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarObserver = model.settings.$menuBarIcon
             .removeDuplicates()
             .sink { [weak self] visible in DispatchQueue.main.async { self?.updateStatusItem(visible: visible) } }
+        // Пункты меню пересоздаём на новом языке.
+        languageObserver = model.settings.$language
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self, let model = self.controller?.model else { return }
+                    self.updateStatusItem(visible: false)
+                    self.updateStatusItem(visible: model.settings.menuBarIcon)
+                }
+            }
     }
 
     private func updateStatusItem(visible: Bool) {
@@ -133,11 +150,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Notchly")
         let menu = NSMenu()
-        let settings = NSMenuItem(title: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: L("Настройки…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Выйти из Notchly", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: L("Выйти из Notchly"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
         statusItem = item
     }

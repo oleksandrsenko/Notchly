@@ -8,13 +8,13 @@ struct ShelfView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(store.items.isEmpty ? "Файлы" : "Файлы · \(store.items.count)")
+                Text(store.items.isEmpty ? L("Файлы") : L("Файлы · %@", "\(store.items.count)"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.6))
                     .contentTransition(.numericText())
                 Spacer()
                 if !store.items.isEmpty {
-                    Button("Очистить") { store.removeAll() }
+                    Button(L("Очистить")) { store.removeAll() }
                         .buttonStyle(.plain)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
@@ -39,7 +39,7 @@ struct ShelfView: View {
                             .font(.system(size: 24, weight: .medium))
                             .contentTransition(.symbolEffect(.replace))
                             .symbolEffect(.bounce, value: isTargeted)
-                        Text("Перетащите файлы сюда, чтобы подержать их под рукой")
+                        Text(L("Перетащите файлы сюда, чтобы подержать их под рукой"))
                             .font(.system(size: 11.5))
                     }
                     .foregroundStyle(.white.opacity(0.5))
@@ -109,21 +109,21 @@ private struct ShelfTile: View {
             .buttonStyle(PressableStyle())
             .padding(4)
             .opacity(hovering ? 1 : 0)
-            .help("Убрать из файлов")
+            .help(L("Убрать из файлов"))
         }
         .onHover { h in withAnimation(.easeOut(duration: 0.18)) { hovering = h } }
         .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
         .onTapGesture(count: 2) { NSWorkspace.shared.open(item.url) }
         .contextMenu {
-            Button("Открыть") { NSWorkspace.shared.open(item.url) }
-            Button("Показать в Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
-            Button("Отправить по AirDrop") { NSSharingService(named: .sendViaAirDrop)?.perform(withItems: [item.url]) }
-            Button("Скопировать путь") {
+            Button(L("Открыть")) { NSWorkspace.shared.open(item.url) }
+            Button(L("Показать в Finder")) { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
+            Button(L("Отправить по AirDrop")) { NSSharingService(named: .sendViaAirDrop)?.perform(withItems: [item.url]) }
+            Button(L("Скопировать путь")) {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(item.url.path, forType: .string)
             }
             Divider()
-            Button("Убрать из файлов", role: .destructive, action: onRemove)
+            Button(L("Убрать из файлов"), role: .destructive, action: onRemove)
         }
         .help(item.url.path)
         .task(id: item.url) { await loadThumbnail() }

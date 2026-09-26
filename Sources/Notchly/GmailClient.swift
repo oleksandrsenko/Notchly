@@ -82,7 +82,7 @@ final class GmailClient: ObservableObject {
                     self.isLoading = false
                     // Обычно после пересборки без постоянной подписи: Связка ключей не отдаёт пароль новой сборке.
                     self.needsPassword = true
-                    self.error = "Введите пароль приложения ещё раз — старая сборка сохранила его недоступным"
+                    self.error = L("Введите пароль приложения ещё раз — старая сборка сохранила его недоступным")
                 }
                 return
             }
@@ -92,7 +92,7 @@ final class GmailClient: ObservableObject {
             await MainActor.run {
                 self.isLoading = false
                 guard let result else {
-                    self.error = "Не удалось обновить почту"
+                    self.error = L("Не удалось обновить почту")
                     return
                 }
                 self.error = nil
@@ -132,7 +132,7 @@ final class GmailClient: ObservableObject {
             group.addTask { try await work() }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw IMAPError(message: "Gmail не ответил вовремя")
+                throw IMAPError(message: L("Gmail не ответил вовремя"))
             }
             let value = try await group.next()!
             group.cancelAll()
@@ -163,7 +163,7 @@ final class GmailClient: ObservableObject {
         defer { session.close() }
         try await session.open()
         let login = try await session.run("LOGIN \(quote(email)) \(quote(password))")
-        guard login.ok else { throw IMAPError(message: "Gmail не принял адрес или пароль приложения") }
+        guard login.ok else { throw IMAPError(message: L("Gmail не принял адрес или пароль приложения")) }
         _ = try await session.run("EXAMINE INBOX")
         let search = try await session.run("SEARCH UNSEEN")
         let ids = String(decoding: search.data, as: UTF8.self)
@@ -228,7 +228,7 @@ final class GmailClient: ObservableObject {
         if name.isEmpty { name = email.isEmpty ? from : email }
         return MailItem(id: String(msgID), threadHex: String(thread, radix: 16),
                         senderName: name, senderEmail: email,
-                        subject: MIMEHeader.decode(fields["subject"] ?? "(без темы)"),
+                        subject: MIMEHeader.decode(fields["subject"] ?? L("(без темы)")),
                         date: MIMEHeader.date(fields["date"] ?? "") ?? Date())
     }
 }
@@ -303,9 +303,9 @@ private final class IMAPSession {
     private func readUntil(_ done: @escaping (Data) -> Bool) async throws -> Data {
         let deadline = Date().addingTimeInterval(20)
         while !done(buffer) {
-            guard Date() < deadline else { throw IMAPError(message: "Gmail не отвечает") }
+            guard Date() < deadline else { throw IMAPError(message: L("Gmail не отвечает")) }
             let chunk = try await receive()
-            guard !chunk.isEmpty else { throw IMAPError(message: "Соединение с Gmail закрыто") }
+            guard !chunk.isEmpty else { throw IMAPError(message: L("Соединение с Gmail закрыто")) }
             buffer.append(chunk)
         }
         let result = buffer

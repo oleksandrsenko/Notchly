@@ -10,10 +10,10 @@ final class FocusTimer: ObservableObject {
 
         var title: String {
             switch self {
-            case .idle: return "Фокус"
-            case .work: return "Фокус"
-            case .shortBreak: return "Перерыв"
-            case .longBreak: return "Длинный перерыв"
+            case .idle: return L("Фокус")
+            case .work: return L("Фокус")
+            case .shortBreak: return L("Перерыв")
+            case .longBreak: return L("Длинный перерыв")
             }
         }
 
@@ -172,9 +172,9 @@ extension TimeInterval {
         let total = Int(self.rounded())
         let h = total / 3600, m = total % 3600 / 60, s = total % 60
         var parts: [String] = []
-        if h > 0 { parts.append("\(h) ч") }
-        if m > 0 { parts.append("\(m) мин") }
-        if s > 0 && h == 0 { parts.append("\(s) с") }
-        return parts.isEmpty ? "0 с" : parts.joined(separator: " ")
+        if h > 0 { parts.append(L("%@ ч", "\(h)")) }
+        if m > 0 { parts.append(L("%@ мин", "\(m)")) }
+        if s > 0 && h == 0 { parts.append(L("%@ с", "\(s)")) }
+        return parts.isEmpty ? L("0 с") : parts.joined(separator: " ")
     }
 }

@@ -117,7 +117,7 @@ struct Note: Identifiable, Codable, Equatable {
     var title: String {
         if let customTitle, !customTitle.isEmpty { return customTitle }
         let first = text.split(separator: "\n", omittingEmptySubsequences: true).first.map(String.init) ?? ""
-        return first.trimmingCharacters(in: .whitespaces).isEmpty ? "Новая заметка" : first
+        return first.trimmingCharacters(in: .whitespaces).isEmpty ? L("Новая заметка") : first
     }
 }
 

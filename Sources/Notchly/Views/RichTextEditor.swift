@@ -33,7 +33,7 @@ final class RichTextController: ObservableObject {
     }
 
     static let baseSize: CGFloat = 13
-    static let sizes: [(title: String, size: CGFloat)] = [("Мелкий", 11), ("Обычный", 13), ("Крупный", 17), ("Заголовок", 22)]
+    static let sizes: [(title: String, size: CGFloat)] = [(L("Мелкий"), 11), (L("Обычный"), 13), (L("Крупный"), 17), (L("Заголовок"), 22)]
 
     func toggleBold() { toggle(.boldFontMask) }
     func toggleItalic() { toggle(.italicFontMask) }
@@ -148,9 +148,9 @@ struct FormatBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            button("bold", "Жирный", active: controller.isBold) { controller.toggleBold() }
-            button("italic", "Курсив", active: controller.isItalic) { controller.toggleItalic() }
-            button("strikethrough", "Зачёркнутый", active: controller.isStrikethrough) { controller.toggleStrikethrough() }
+            button("bold", L("Жирный"), active: controller.isBold) { controller.toggleBold() }
+            button("italic", L("Курсив"), active: controller.isItalic) { controller.toggleItalic() }
+            button("strikethrough", L("Зачёркнутый"), active: controller.isStrikethrough) { controller.toggleStrikethrough() }
             Menu {
                 ForEach(RichTextController.sizes, id: \.size) { item in
                     Button(item.title) { controller.setSize(item.size) }
@@ -164,7 +164,7 @@ struct FormatBar: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .frame(width: 24, height: 20)
-            .help("Размер шрифта")
+            .help(L("Размер шрифта"))
         }
         .padding(.horizontal, 3)
         .frame(height: 24)

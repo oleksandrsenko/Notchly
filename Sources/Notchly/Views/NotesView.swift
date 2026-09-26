@@ -25,7 +25,7 @@ struct NotesView: View {
                 HStack(spacing: 8) {
                     ForEach(Mode.segments, id: \.self) { item in
                         Button { switchTo(item) } label: {
-                            Text(item.rawValue)
+                            Text(L(item.rawValue))
                                 .font(.system(size: 11.5, weight: .semibold))
                                 .foregroundStyle(mode == item ? .black : .white.opacity(0.6))
                                 .padding(.horizontal, 11)
@@ -111,7 +111,7 @@ struct NotesView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .id(id)
                     if store.selected?.text.isEmpty ?? true {
-                        Text("Начните печатать…")
+                        Text(L("Начните печатать…"))
                             .font(.system(size: 13))
                             .foregroundStyle(.white.opacity(0.3))
                             .padding(.horizontal, 13)
@@ -128,7 +128,7 @@ struct NotesView: View {
 
 /// Короткое время: сегодня — «15:42», раньше — «24 сент., 15:42».
 func shortTimestamp(_ date: Date) -> String {
-    let ru = Locale(identifier: "ru_RU")
+    let ru = Loc.locale
     if Calendar.current.isDateInToday(date) {
         return date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(ru))
     }
@@ -162,7 +162,7 @@ private struct NoteRow: View {
         HStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 1) {
                 if renaming {
-                    TextField("Название", text: $draft)
+                    TextField(L("Название"), text: $draft)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11.5, weight: .semibold))
                         .focused($focused)
@@ -187,7 +187,7 @@ private struct NoteRow: View {
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 .buttonStyle(.plain)
-                .help("Переименовать")
+                .help(L("Переименовать"))
                 .transition(.opacity)
                 Button(action: onDelete) {
                     Image(systemName: "trash")
@@ -206,8 +206,8 @@ private struct NoteRow: View {
         .onTapGesture(count: 2, perform: startRename)
         .onTapGesture(perform: onSelect)
         .contextMenu {
-            Button("Переименовать", action: startRename)
-            Button("Удалить", role: .destructive, action: onDelete)
+            Button(L("Переименовать"), action: startRename)
+            Button(L("Удалить"), role: .destructive, action: onDelete)
         }
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
     }
@@ -218,17 +218,17 @@ private struct DayStrip: View {
     @ObservedObject var store: TasksStore
     @Namespace private var ns
 
-    private static let weekday: DateFormatter = {
+    private static var weekday: DateFormatter {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
+        f.locale = Loc.locale
         f.dateFormat = "EE"
         return f
-    }()
+    }
 
     private func title(_ offset: Int) -> String {
         switch offset {
-        case 0: return "Сегодня"
-        case 1: return "Завтра"
+        case 0: return L("Сегодня")
+        case 1: return L("Завтра")
         default:
             let text = Self.weekday.string(from: TasksStore.date(forOffset: offset))
             return text.prefix(1).uppercased() + text.dropFirst()
@@ -263,7 +263,7 @@ private struct DayStrip: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableStyle())
-                .help(TasksView.dayTitle(offset, lowercased: offset > 1) + (open > 0 ? " · задач: \(open)" : ""))
+                .help(TasksView.dayTitle(offset, lowercased: offset > 1) + (open > 0 ? L(" · задач: %@", "\(open)") : ""))
             }
             if store.tasks(forOffset: store.selectedDay).contains(where: \.done) {
                 Button { store.clearDone() } label: {
@@ -274,7 +274,7 @@ private struct DayStrip: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(PressableStyle())
-                .help("Убрать выполненные")
+                .help(L("Убрать выполненные"))
                 .transition(.opacity)
             }
         }

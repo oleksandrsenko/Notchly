@@ -30,12 +30,12 @@ final class KeyVault: ObservableObject {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            authError = "На этом Mac недоступны Touch ID и пароль"
+            authError = L("На этом Mac недоступны Touch ID и пароль")
             return
         }
         // Окно Touch ID должно оказаться поверх всего и принимать ввод пароля.
         NSApp.activate(ignoringOtherApps: true)
-        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "открыть API-ключи") { [weak self] ok, _ in
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: L("открыть API-ключи")) { [weak self] ok, _ in
             DispatchQueue.main.async {
                 guard let self else { return }
                 if ok {
@@ -44,7 +44,7 @@ final class KeyVault: ObservableObject {
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) { self.isUnlocked = true }
                     self.scheduleLock()
                 } else {
-                    self.authError = "Не удалось подтвердить личность"
+                    self.authError = L("Не удалось подтвердить личность")
                 }
             }
         }
@@ -65,7 +65,7 @@ final class KeyVault: ObservableObject {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            keys.insert(APIKey(name: name.isEmpty ? "Ключ \(keys.count + 1)" : name, value: value), at: 0)
+            keys.insert(APIKey(name: name.isEmpty ? L("Ключ %@", "\(keys.count + 1)") : name, value: value), at: 0)
         }
         save()
         scheduleLock()

@@ -29,7 +29,7 @@ final class GeminiAssistant: ObservableObject {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         hasKey = Keychain.set(Data(trimmed.utf8), service: Self.service, account: Self.account)
-        error = hasKey ? nil : "Не удалось сохранить ключ в Связке ключей"
+        error = hasKey ? nil : L("Не удалось сохранить ключ в Связке ключей")
     }
 
     func removeKey() {
@@ -138,7 +138,7 @@ final class GeminiAssistant: ObservableObject {
         guard let model = models.first,
               let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"),
               let data = try? JSONSerialization.data(withJSONObject: body) else {
-            return done(.failure("Gemini недоступен"))
+            return done(.failure(L("Gemini недоступен")))
         }
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "POST"
@@ -156,21 +156,21 @@ final class GeminiAssistant: ObservableObject {
             if let error { return done(.failure(error.localizedDescription)) }
             if status == 200 { UserDefaults.standard.set(model, forKey: "gemini.lastModel") }
             guard let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                return done(.failure("Пустой ответ от Gemini"))
+                return done(.failure(L("Пустой ответ от Gemini")))
             }
             guard status == 200 else {
                 let message = (json["error"] as? [String: Any])?["message"] as? String
                 switch status {
                 case 400, 401, 403:
-                    return done(.failure("Ключ API не подошёл" + (message.map { ": \($0)" } ?? "")))
+                    return done(.failure(L("Ключ API не подошёл") + (message.map { ": \($0)" } ?? "")))
                 case 429:
-                    return done(.failure("Лимит бесплатных запросов исчерпан — попробуйте позже"))
+                    return done(.failure(L("Лимит бесплатных запросов исчерпан — попробуйте позже")))
                 case 500, 503:
-                    return done(.failure("Серверы Gemini сейчас перегружены — попробуйте через минуту"))
+                    return done(.failure(L("Серверы Gemini сейчас перегружены — попробуйте через минуту")))
                 case 404:
-                    return done(.failure("Google сменил модели Gemini — обновите приложение"))
+                    return done(.failure(L("Google сменил модели Gemini — обновите приложение")))
                 default:
-                    return done(.failure(message ?? "Ошибка Gemini (\(status))"))
+                    return done(.failure(message ?? L("Ошибка Gemini (%@)", "\(status)")))
                 }
             }
             let text = ((json["candidates"] as? [[String: Any]])?.first?["content"] as? [String: Any])

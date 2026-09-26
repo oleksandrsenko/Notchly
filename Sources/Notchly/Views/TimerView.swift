@@ -20,7 +20,7 @@ struct TimerView: View {
             HStack(spacing: 8) {
                 ForEach(Mode.allCases, id: \.self) { item in
                     Button { switchTo(item) } label: {
-                        Text(item.rawValue)
+                        Text(L(item.rawValue))
                             .font(.system(size: 11.5, weight: .semibold))
                             .foregroundStyle(mode == item ? .black : .white.opacity(0.6))
                             .padding(.horizontal, 11)
@@ -55,9 +55,9 @@ struct TimerView: View {
 
     private var headerNote: String {
         switch mode {
-        case .focus: return "Подходов сегодня: \(focus.completedToday)"
-        case .timer: return countdown.isActive ? "Идёт отсчёт" : ""
-        case .alarm: return alarms.next.map { "Ближайший: \($0.time)" } ?? ""
+        case .focus: return L("Подходов сегодня: %@", "\(focus.completedToday)")
+        case .timer: return countdown.isActive ? L("Идёт отсчёт") : ""
+        case .alarm: return alarms.next.map { L("Ближайший: %@", "\($0.time)") } ?? ""
         }
     }
 
@@ -87,28 +87,28 @@ struct TimerView: View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             HStack(spacing: 22) {
                 BigRing(progress: focus.progress(at: ctx.date), tint: FocusCompactView.tint(for: focus.phase),
-                        time: focus.remaining(at: ctx.date).clock, caption: focus.isActive ? focus.phase.title : "25 мин",
+                        time: focus.remaining(at: ctx.date).clock, caption: focus.isActive ? focus.phase.title : L("25 мин"),
                         dimmed: focus.isPaused)
                 VStack(alignment: .leading, spacing: 9) {
-                    Text(focus.isActive ? (focus.taskTitle ?? "Без задачи") : "Фокус по технике «Помидор»")
+                    Text(focus.isActive ? (focus.taskTitle ?? L("Без задачи")) : L("Фокус по технике «Помидор»"))
                         .font(.system(size: 15, weight: .semibold))
                         .lineLimit(1)
-                    Text("25 мин работы · 5 мин перерыв · 15 мин после каждого 4-го")
+                    Text(L("25 мин работы · 5 мин перерыв · 15 мин после каждого 4-го"))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.45))
                         .lineLimit(1)
                     if focus.isActive {
                         HStack(spacing: 8) {
                             RoundButton(symbol: focus.isPaused ? "play.fill" : "pause.fill",
-                                        help: focus.isPaused ? "Продолжить" : "Пауза") { focus.togglePause() }
+                                        help: focus.isPaused ? L("Продолжить") : L("Пауза")) { focus.togglePause() }
                             RoundButton(symbol: "forward.end.fill",
-                                        help: focus.phase.isBreak ? "Закончить перерыв" : "К перерыву") { focus.skip() }
-                            RoundButton(symbol: "stop.fill", help: "Остановить") { focus.stop() }
+                                        help: focus.phase.isBreak ? L("Закончить перерыв") : L("К перерыву")) { focus.skip() }
+                            RoundButton(symbol: "stop.fill", help: L("Остановить")) { focus.stop() }
                         }
                     } else {
                         HStack(spacing: 8) {
                             taskMenu
-                            PrimaryButton(title: "Начать фокус", symbol: "play.fill") {
+                            PrimaryButton(title: L("Начать фокус"), symbol: "play.fill") {
                                 let task = tasks.items.first { $0.id == selectedTask }
                                 model.startFocus(taskID: task?.id, title: task?.text)
                             }
@@ -125,9 +125,9 @@ struct TimerView: View {
 
     private var taskMenu: some View {
         let open = tasks.tasks(forOffset: 0).filter { !$0.done }
-        let title = open.first { $0.id == selectedTask }?.text ?? "Без задачи"
+        let title = open.first { $0.id == selectedTask }?.text ?? L("Без задачи")
         return Menu {
-            Button("Без задачи") { selectedTask = nil }
+            Button(L("Без задачи")) { selectedTask = nil }
             if !open.isEmpty { Divider() }
             ForEach(open) { task in
                 Button(task.time.map { "\($0)  \(task.text)" } ?? task.text) { selectedTask = task.id }
@@ -145,7 +145,7 @@ struct TimerView: View {
         .frame(height: 28)
         .frame(maxWidth: 170)
         .background(Capsule().fill(.white.opacity(0.1)))
-        .help("К какой задаче привязать фокус")
+        .help(L("К какой задаче привязать фокус"))
     }
 
     /// Четыре точки — подходы до длинного перерыва.
@@ -159,7 +159,7 @@ struct TimerView: View {
             }
         }
         .padding(.trailing, 6)
-        .help("Подходы до длинного перерыва")
+        .help(L("Подходы до длинного перерыва"))
     }
 
     // MARK: - Таймер
@@ -169,7 +169,7 @@ struct TimerView: View {
             HStack(spacing: 22) {
                 BigRing(progress: countdown.progress(at: ctx.date), tint: CountdownCompactView.tint,
                         time: countdown.remaining(at: ctx.date).clock,
-                        caption: countdown.isActive ? (countdown.isPaused ? "Пауза" : "Осталось") : "Таймер",
+                        caption: countdown.isActive ? (countdown.isPaused ? L("Пауза") : L("Осталось")) : L("Таймер"),
                         dimmed: countdown.isPaused)
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
@@ -186,19 +186,19 @@ struct TimerView: View {
                             .buttonStyle(PressableStyle())
                             .disabled(countdown.isActive)
                         }
-                        Text("мин").font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.45))
+                        Text(L("мин")).font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.45))
                     }
                     .opacity(countdown.isActive ? 0.4 : 1)
                     HStack(spacing: 10) {
                         if countdown.isActive {
                             RoundButton(symbol: countdown.isPaused ? "play.fill" : "pause.fill",
-                                        help: countdown.isPaused ? "Продолжить" : "Пауза") { countdown.togglePause() }
-                            RoundButton(symbol: "arrow.counterclockwise", help: "Сбросить") { countdown.reset() }
+                                        help: countdown.isPaused ? L("Продолжить") : L("Пауза")) { countdown.togglePause() }
+                            RoundButton(symbol: "arrow.counterclockwise", help: L("Сбросить")) { countdown.reset() }
                         } else {
                             // Минуты и секунды: стрелками или вписать число самому.
                             HStack(spacing: 2) {
                                 NumberWheel(value: countdown.seconds / 60, range: 0...180, fontSize: 26,
-                                            caption: "мин") { m in
+                                            caption: L("мин")) { m in
                                     countdown.setSeconds(m * 60 + countdown.seconds % 60)
                                 }
                                 Text(":")
@@ -206,11 +206,11 @@ struct TimerView: View {
                                     .foregroundStyle(.white.opacity(0.5))
                                     .padding(.bottom, 12)
                                 NumberWheel(value: countdown.seconds % 60, range: 0...59, step: 5, wraps: true,
-                                            fontSize: 26, caption: "сек") { sec in
+                                            fontSize: 26, caption: L("сек")) { sec in
                                     countdown.setSeconds(countdown.seconds / 60 * 60 + sec)
                                 }
                             }
-                            PrimaryButton(title: "Старт", symbol: "play.fill") { countdown.start() }
+                            PrimaryButton(title: L("Старт"), symbol: "play.fill") { countdown.start() }
                                 .padding(.leading, 6)
                         }
                     }
@@ -233,7 +233,7 @@ struct TimerView: View {
                     Text(":").font(.system(size: 32, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.5))
                     NumberWheel(value: alarmMinute, range: 0...59, step: 5, wraps: true) { alarmMinute = $0 }
                 }
-                PrimaryButton(title: "Добавить", symbol: "alarm.fill") {
+                PrimaryButton(title: L("Добавить"), symbol: "alarm.fill") {
                     alarms.add(String(format: "%02d:%02d", alarmHour, alarmMinute))
                 }
             }
@@ -241,7 +241,7 @@ struct TimerView: View {
 
             Group {
                 if alarms.alarms.isEmpty {
-                    Text("Будильников нет. Выберите время слева и нажмите «Добавить».")
+                    Text(L("Будильников нет. Выберите время слева и нажмите «Добавить»."))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.35))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -298,7 +298,7 @@ private struct NumberWheel: View {
                             editing = true
                             DispatchQueue.main.async { focused = true }
                         }
-                        .help("Нажмите, чтобы ввести число")
+                        .help(L("Нажмите, чтобы ввести число"))
                 }
             }
             .font(.system(size: fontSize, weight: .semibold, design: .rounded))
@@ -438,7 +438,7 @@ private struct AlarmRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Удалить будильник")
+                .help(L("Удалить будильник"))
             }
             Toggle("", isOn: Binding(get: { alarm.enabled }, set: { _ in store.toggle(alarm.id) }))
                 .toggleStyle(.switch)

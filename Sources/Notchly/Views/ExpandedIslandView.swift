@@ -192,7 +192,7 @@ private struct NotificationBell: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(PressableStyle())
-        .help("Центр уведомлений")
+        .help(L("Центр уведомлений"))
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
     }
 }

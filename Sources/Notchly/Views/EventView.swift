@@ -51,25 +51,25 @@ struct EventView: View {
                 .frame(maxHeight: .infinity)
         case .timerDone(let duration):
             ActionCard(symbol: "hourglass.bottomhalf.filled", tint: .orange,
-                       title: "Таймер завершён",
+                       title: L("Таймер завершён"),
                        subtitle: duration.durationText) {
-                CardButton(title: "Ещё раз", systemImage: "arrow.clockwise") {
+                CardButton(title: L("Ещё раз"), systemImage: "arrow.clockwise") {
                     model.countdown.start(seconds: Int(duration.rounded()))
                     model.dismissEvent()
                 }
-                CardButton(title: "Готово", prominent: true) { model.dismissEvent() }
+                CardButton(title: L("Готово"), prominent: true) { model.dismissEvent() }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
             .frame(maxHeight: .infinity)
         case .alarm(let alarm):
-            ActionCard(symbol: "alarm.fill", tint: .yellow, title: "Будильник · \(alarm.time)",
-                       subtitle: "Пора!") {
-                CardButton(title: "+5 мин") {
+            ActionCard(symbol: "alarm.fill", tint: .yellow, title: L("Будильник · %@", "\(alarm.time)"),
+                       subtitle: L("Пора!")) {
+                CardButton(title: L("+5 мин")) {
                     model.alarms.snooze()
                     model.dismissEvent()
                 }
-                CardButton(title: "Стоп", systemImage: "stop.fill", prominent: true) { model.dismissEvent() }
+                CardButton(title: L("Стоп"), systemImage: "stop.fill", prominent: true) { model.dismissEvent() }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
@@ -165,7 +165,7 @@ private struct CompactDeviceEvent: View {
                 }
                 .padding(.trailing, 12)
             } else if buds == nil {
-                Text("Подключено")
+                Text(L("Подключено"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.trailing, 14)
@@ -174,7 +174,7 @@ private struct CompactDeviceEvent: View {
         .frame(maxHeight: .infinity)
         .opacity(appeared ? 1 : 0)
         .onAppear { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { appeared = true } }
-        .help("Нажмите, чтобы увидеть заряд подробнее")
+        .help(L("Нажмите, чтобы увидеть заряд подробнее"))
     }
 
     private func percent(_ value: Int) -> some View {
@@ -208,17 +208,17 @@ private struct FocusEvent: View {
 
     private var title: String {
         switch transition {
-        case .workFinished(let next, _): return next == .longBreak ? "Длинный перерыв · 15 мин" : "Перерыв · 5 мин"
-        case .breakFinished: return "Перерыв окончен"
+        case .workFinished(let next, _): return next == .longBreak ? L("Длинный перерыв · 15 мин") : L("Перерыв · 5 мин")
+        case .breakFinished: return L("Перерыв окончен")
         }
     }
 
     private var subtitle: String {
         switch transition {
         case .workFinished(_, let held):
-            let done = "Подходов сегодня: \(model.focus.completedToday)"
-            return held > 0 ? "\(done) · ждут уведомления: \(held)" : done
-        case .breakFinished: return "Готовы к следующему подходу?"
+            let done = L("Подходов сегодня: %@", "\(model.focus.completedToday)")
+            return held > 0 ? L("%@ · ждут уведомления: %@", "\(done)", "\(held)") : done
+        case .breakFinished: return L("Готовы к следующему подходу?")
         }
     }
 
@@ -237,12 +237,12 @@ private struct FocusEvent: View {
             Spacer(minLength: 6)
             switch transition {
             case .workFinished:
-                CardButton(title: "Пропустить") {
+                CardButton(title: L("Пропустить")) {
                     model.focus.skip()
                     model.dismissEvent()
                 }
             case .breakFinished:
-                CardButton(title: "Начать фокус", systemImage: "play.fill", prominent: true) {
+                CardButton(title: L("Начать фокус"), systemImage: "play.fill", prominent: true) {
                     model.startFocus(taskID: model.focus.taskID, title: model.focus.taskTitle)
                 }
             }
@@ -290,17 +290,17 @@ private struct ReminderEvent: View {
             Spacer(minLength: 6)
             HStack(spacing: 6) {
                 if let link = reminder.link {
-                    CardButton(title: isMeeting ? "Войти" : "Открыть",
+                    CardButton(title: isMeeting ? L("Войти") : L("Открыть"),
                                systemImage: isMeeting ? "video.fill" : "link",
                                prominent: true, tint: isMeeting ? .green : .white) {
                         NSWorkspace.shared.open(link)
                         onClose()
                     }
                 }
-                CardButton(title: "+5 мин") { model.snoozeReminder(reminder) }
-                    .help("Напомнить через 5 минут")
+                CardButton(title: L("+5 мин")) { model.snoozeReminder(reminder) }
+                    .help(L("Напомнить через 5 минут"))
                 if reminder.taskID != nil {
-                    CardButton(title: "Готово", systemImage: "checkmark",
+                    CardButton(title: L("Готово"), systemImage: "checkmark",
                                prominent: reminder.link == nil) { model.completeReminder(reminder) }
                 }
             }
@@ -342,7 +342,7 @@ private struct NotificationEvent: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    Text("сейчас")
+                    Text(L("сейчас"))
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(.white.opacity(0.4))
                 }
@@ -385,7 +385,7 @@ private struct ChargingEvent: View {
             .scaleEffect(appeared ? 1 : 0.9)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Зарядка")
+                Text(L("Зарядка"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.green)
                 Text("MacBook")
@@ -500,7 +500,7 @@ private struct DeviceSheet: View {
                                 .monospacedDigit()
                                 .foregroundStyle(.white.opacity(0.9))
                         } else {
-                            Text("Подключено")
+                            Text(L("Подключено"))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.55))
                         }

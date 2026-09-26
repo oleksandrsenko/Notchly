@@ -17,7 +17,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 660, height: 470),
                                         styleMask: [.titled, .closable, .miniaturizable],
                                         backing: .buffered, defer: false)
-            window.title = "Настройки Notchly"
+            window.title = L("Настройки Notchly")
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.contentViewController = NSHostingController(rootView: SettingsView(model: model))
@@ -40,6 +40,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         origin.y = max(origin.y, screen.visibleFrame.minY + 8)
         window.setFrameOrigin(origin)
     }
+
+    func updateTitle() { window?.title = L("Настройки Notchly") }
 
     func windowWillClose(_ notification: Notification) {
         guard let model else { return }
@@ -113,7 +115,7 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             List(Pane.allCases, selection: $section) { item in
                 Label {
-                    Text(item.rawValue)
+                    Text(L(item.rawValue))
                 } icon: {
                     Image(systemName: item.icon)
                         .font(.system(size: 10.5, weight: .semibold))
@@ -142,6 +144,8 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 620, minHeight: 440)
+        .id(settings.language)
+        .onChange(of: settings.language) { _, _ in SettingsWindowController.shared.updateTitle() }
         .onChange(of: section) { _, value in
             // Остров показывает то, что сейчас настраивается.
             switch value {
@@ -162,28 +166,37 @@ struct SettingsView: View {
     private var general: some View {
         Form {
             Section {
-                Toggle("Запускать при входе в систему", isOn: Binding(
+                Picker(L("Язык"), selection: $settings.language) {
+                    ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(L("Язык интерфейса меняется сразу, без перезапуска."))
+                    .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Section {
+                Toggle(L("Запускать при входе в систему"), isOn: Binding(
                     get: { settings.launchAtLogin }, set: { settings.launchAtLogin = $0 }))
-                Toggle("Значок в строке меню", isOn: $settings.menuBarIcon)
+                Toggle(L("Значок в строке меню"), isOn: $settings.menuBarIcon)
             } footer: {
                 if !settings.menuBarIcon {
-                    Text("Без значка настройки открываются из вкладки «Управление» или повторным запуском Notchly.")
+                    Text(L("Без значка настройки открываются из вкладки «Управление» или повторным запуском Notchly."))
                         .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             Section {
-                Picker("Открывать на вкладке", selection: $settings.openOnHome) {
-                    Text("Главная").tag(true)
-                    Text("Последняя открытая").tag(false)
+                Picker(L("Открывать на вкладке"), selection: $settings.openOnHome) {
+                    Text(L("Главная")).tag(true)
+                    Text(L("Последняя открытая")).tag(false)
                 }
-                LabeledContent("Закрывать, когда курсор ушёл, через") {
-                    Text("\(settings.closeDelay.formatted(.number.precision(.fractionLength(1)))) с")
+                LabeledContent(L("Закрывать, когда курсор ушёл, через")) {
+                    Text(L("%@ с", "\(settings.closeDelay.formatted(.number.precision(.fractionLength(1)).locale(Loc.locale)))"))
                         .monospacedDigit()
                 }
                 Slider(value: Binding(get: { settings.closeDelay },
                                       set: { settings.closeDelay = ($0 * 10).rounded() / 10 }),
                        in: AppSettings.closeDelayRange) {
-                    Text("Задержка")
+                    Text(L("Задержка"))
                 } minimumValueLabel: {
                     Image(systemName: "hare")
                 } maximumValueLabel: {
@@ -191,9 +204,9 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
             } header: {
-                Text("Раскрытый остров")
+                Text(L("Раскрытый остров"))
             } footer: {
-                Text("Клик мимо острова закрывает его сразу.")
+                Text(L("Клик мимо острова закрывает его сразу."))
                     .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -216,18 +229,18 @@ struct SettingsView: View {
                                    setVisible: { setVisible(slot, $0) })
                     }
                     if slots.isEmpty {
-                        Text("Пусто").foregroundStyle(.secondary)
+                        Text(L("Пусто")).foregroundStyle(.secondary)
                     }
                 } header: {
-                    Text(side == .leading ? "Слева от выреза" : "Справа от выреза")
+                    Text(side == .leading ? L("Слева от выреза") : L("Справа от выреза"))
                 } footer: {
                     if side == .trailing {
                         HStack(alignment: .top) {
-                            Text("Колокольчик уведомлений всегда стоит справа, последним. Главная всегда видна.")
+                            Text(L("Колокольчик уведомлений всегда стоит справа, последним. Главная всегда видна."))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Spacer()
-                            Button("Как было") { animateTabs { settings.resetTabs() } }
+                            Button(L("Как было")) { animateTabs { settings.resetTabs() } }
                         }
                     }
                 }
@@ -271,15 +284,15 @@ struct SettingsView: View {
 
     private var island: some View {
         Form {
-            Section("Свёрнутый остров") {
-                Toggle("Музыка: обложка и эквалайзер по бокам выреза", isOn: $settings.musicActivity)
-                Toggle("Шторка с названием нового трека", isOn: $settings.trackPeek)
-                Toggle("Громкость и яркость вместо системного индикатора", isOn: $settings.hud)
-                Toggle("«Скопировано» при копировании", isOn: $settings.copiedPeek)
+            Section(L("Свёрнутый остров")) {
+                Toggle(L("Музыка: обложка и эквалайзер по бокам выреза"), isOn: $settings.musicActivity)
+                Toggle(L("Шторка с названием нового трека"), isOn: $settings.trackPeek)
+                Toggle(L("Громкость и яркость вместо системного индикатора"), isOn: $settings.hud)
+                Toggle(L("«Скопировано» при копировании"), isOn: $settings.copiedPeek)
             }
-            Section("Карточки") {
-                Toggle("Подключили зарядку", isOn: $settings.chargingCard)
-                Toggle("Подключили наушники (заряд AirPods)", isOn: $settings.headphonesCard)
+            Section(L("Карточки")) {
+                Toggle(L("Подключили зарядку"), isOn: $settings.chargingCard)
+                Toggle(L("Подключили наушники (заряд AirPods)"), isOn: $settings.headphonesCard)
             }
         }
         .formStyle(.grouped)
@@ -290,18 +303,18 @@ struct SettingsView: View {
     private var notifications: some View {
         Form {
             Section {
-                Toggle("Уведомления приложений", isOn: $settings.appNotifications)
-                Toggle("Новые письма Gmail", isOn: $settings.gmailNotifications)
-                Toggle("Напоминания о задачах и встречах", isOn: $settings.reminders)
+                Toggle(L("Уведомления приложений"), isOn: $settings.appNotifications)
+                Toggle(L("Новые письма Gmail"), isOn: $settings.gmailNotifications)
+                Toggle(L("Напоминания о задачах и встречах"), isOn: $settings.reminders)
             } header: {
-                Text("Показывать на острове")
+                Text(L("Показывать на острове"))
             } footer: {
-                Text("Всё пришедшее остаётся в центре уведомлений (колокольчик) — выключается только всплывающая карточка. Во время «Помидора» уведомления копятся молча.")
+                Text(L("Всё пришедшее остаётся в центре уведомлений (колокольчик) — выключается только всплывающая карточка. Во время «Помидора» уведомления копятся молча."))
                     .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
             }
             Section {
-                Toggle("Тихий сигнал: напоминания, таймер, будильник", isOn: $settings.sounds)
-                Button("Прослушать") { SoftChime.play() }
+                Toggle(L("Тихий сигнал: напоминания, таймер, будильник"), isOn: $settings.sounds)
+                Button(L("Прослушать")) { SoftChime.play() }
             }
         }
         .formStyle(.grouped)
@@ -314,45 +327,45 @@ struct SettingsView: View {
 
     private var clipboardPane: some View {
         Form {
-            Section("Текст") {
-                Toggle("Запоминать скопированный текст", isOn: $settings.clipboardHistory)
-                Picker("Хранить историю", selection: Binding(
+            Section(L("Текст")) {
+                Toggle(L("Запоминать скопированный текст"), isOn: $settings.clipboardHistory)
+                Picker(L("Хранить историю"), selection: Binding(
                     get: { clipboard.retentionDays }, set: { clipboard.retentionDays = $0 })) {
                     ForEach(ClipboardMonitor.retentionOptions, id: \.self) { days in
                         Text(Self.retentionTitle(days)).tag(days)
                     }
                 }
                 .disabled(!settings.clipboardHistory)
-                Button("Очистить историю…", role: .destructive) { confirmHistory = true }
+                Button(L("Очистить историю…"), role: .destructive) { confirmHistory = true }
                     .disabled(clipboard.groups.isEmpty)
-                    .confirmationDialog("Очистить всю историю буфера обмена?", isPresented: $confirmHistory) {
-                        Button("Очистить", role: .destructive) { clipboard.clear() }
+                    .confirmationDialog(L("Очистить всю историю буфера обмена?"), isPresented: $confirmHistory) {
+                        Button(L("Очистить"), role: .destructive) { clipboard.clear() }
                     }
             }
             Section {
-                Toggle("Сохранять снимки экрана и скопированные картинки", isOn: $settings.screenshots)
-                Toggle("Брать и снимки, сохранённые на рабочий стол", isOn: $settings.screenshotFiles)
+                Toggle(L("Сохранять снимки экрана и скопированные картинки"), isOn: $settings.screenshots)
+                Toggle(L("Брать и снимки, сохранённые на рабочий стол"), isOn: $settings.screenshotFiles)
                     .disabled(!settings.screenshots)
-                Picker("Хранить снимки", selection: Binding(
+                Picker(L("Хранить снимки"), selection: Binding(
                     get: { shots.retentionDays }, set: { shots.retentionDays = $0 })) {
                     ForEach(ScreenshotStore.retentionOptions, id: \.self) { days in
                         Text(Self.retentionTitle(days)).tag(days)
                     }
                 }
                 .disabled(!settings.screenshots)
-                LabeledContent("Занято") {
-                    Text("\(shots.items.count) шт. · \(ByteCountFormatter.string(fromByteCount: Int64(shots.totalBytes), countStyle: .file))")
+                LabeledContent(L("Занято")) {
+                    Text(L("%@ шт. · %@", "\(shots.items.count)", "\(ByteCountFormatter.string(fromByteCount: Int64(shots.totalBytes), countStyle: .file))"))
                         .monospacedDigit()
                 }
-                Button("Удалить все снимки…", role: .destructive) { confirmShots = true }
+                Button(L("Удалить все снимки…"), role: .destructive) { confirmShots = true }
                     .disabled(shots.items.isEmpty)
-                    .confirmationDialog("Удалить все сохранённые снимки?", isPresented: $confirmShots) {
-                        Button("Удалить", role: .destructive) { shots.clear() }
+                    .confirmationDialog(L("Удалить все сохранённые снимки?"), isPresented: $confirmShots) {
+                        Button(L("Удалить"), role: .destructive) { shots.clear() }
                     }
             } header: {
-                Text("Снимки")
+                Text(L("Снимки"))
             } footer: {
-                Text("Снимок весит 1–8 МБ, поэтому они хранятся недолго: не больше \(ScreenshotStore.maxItems) штук, старые удаляются сами. Снимки с рабочего стола копируются — оригиналы остаются на месте. Для них macOS один раз спросит доступ к папке.")
+                Text(L("Снимок весит 1–8 МБ, поэтому они хранятся недолго: не больше %@ штук, старые удаляются сами. Снимки с рабочего стола копируются — оригиналы остаются на месте. Для них macOS один раз спросит доступ к папке.", "\(ScreenshotStore.maxItems)"))
                     .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -361,10 +374,8 @@ struct SettingsView: View {
 
     static func retentionTitle(_ days: Int) -> String {
         switch days {
-        case 0: return "Бесконечно"
-        case 1: return "1 день"
-        case 2, 3, 4: return "\(days) дня"
-        default: return "\(days) дней"
+        case 0: return L("Бесконечно")
+        default: return "\(days) " + Loc.plural(days, "день", "дня", "дней", en: "day", enPlural: "days")
         }
     }
 
@@ -379,9 +390,9 @@ struct SettingsView: View {
                         .frame(width: 88, height: 88)
                     Text("Notchly")
                         .font(.system(size: 22, weight: .bold))
-                    Text("Версия \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")")
+                    Text(L("Версия %@", "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")"))
                         .foregroundStyle(.secondary)
-                    Text("Остров в вырезе экрана: музыка, задачи, таймеры, напоминания и уведомления.\nВсе данные хранятся только на этом Mac.")
+                    Text(L("Остров в вырезе экрана: музыка, задачи, таймеры, напоминания и уведомления.\nВсе данные хранятся только на этом Mac."))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
@@ -390,7 +401,7 @@ struct SettingsView: View {
                 .padding(.vertical, 12)
             }
             Section {
-                Button("Выйти из Notchly") { NSApp.terminate(nil) }
+                Button(L("Выйти из Notchly")) { NSApp.terminate(nil) }
             }
         }
         .formStyle(.grouped)
@@ -417,10 +428,10 @@ private struct TabSlotRow: View {
                 .foregroundStyle(slot.visible ? .primary : .secondary)
             Spacer()
             HStack(spacing: 2) {
-                small("chevron.up", help: "Левее / выше", disabled: isFirst) { move(-1) }
-                small("chevron.down", help: "Правее / ниже", disabled: isLast) { move(1) }
+                small("chevron.up", help: L("Левее / выше"), disabled: isFirst) { move(-1) }
+                small("chevron.down", help: L("Правее / ниже"), disabled: isLast) { move(1) }
                 small(slot.side == .leading ? "arrow.right" : "arrow.left",
-                      help: slot.side == .leading ? "Перенести направо от выреза" : "Перенести налево от выреза",
+                      help: slot.side == .leading ? L("Перенести направо от выреза") : L("Перенести налево от выреза"),
                       disabled: false, action: switchSide)
             }
             Toggle("", isOn: Binding(get: { slot.visible }, set: setVisible))
@@ -428,7 +439,7 @@ private struct TabSlotRow: View {
                 .controlSize(.small)
                 .labelsHidden()
                 .disabled(slot.tab == .home)
-                .help(slot.tab == .home ? "Главная всегда видна" : "Показывать вкладку")
+                .help(slot.tab == .home ? L("Главная всегда видна") : L("Показывать вкладку"))
         }
     }
 

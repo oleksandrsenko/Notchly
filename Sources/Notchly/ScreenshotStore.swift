@@ -223,8 +223,8 @@ final class ScreenshotStore: ObservableObject {
     /// «Снимок 26.09 в 10.12.34.png» — понятное имя для перетаскивания и сохранения.
     private func uniqueName(for date: Date) -> String {
         let f = DateFormatter()
-        f.dateFormat = "dd.MM 'в' HH.mm.ss"
-        let base = "Снимок \(f.string(from: date))"
+        f.dateFormat = Loc.isRussian ? "dd.MM 'в' HH.mm.ss" : "MM-dd 'at' HH.mm.ss"
+        let base = L("Снимок %@", "\(f.string(from: date))")
         var name = base + ".png"
         var n = 2
         while items.contains(where: { $0.fileName == name })

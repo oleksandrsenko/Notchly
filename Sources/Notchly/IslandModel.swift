@@ -21,14 +21,14 @@ enum IslandTab: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .home: return "Главная"
-        case .music: return "Музыка"
-        case .timer: return "Таймер"
-        case .shelf: return "Файлы"
-        case .notes: return "Заметки и задачи"
-        case .clipboard: return "Буфер обмена"
-        case .controls: return "Управление"
-        case .notifications: return "Уведомления"
+        case .home: return L("Главная")
+        case .music: return L("Музыка")
+        case .timer: return L("Таймер")
+        case .shelf: return L("Файлы")
+        case .notes: return L("Заметки и задачи")
+        case .clipboard: return L("Буфер обмена")
+        case .controls: return L("Управление")
+        case .notifications: return L("Уведомления")
         }
     }
 }

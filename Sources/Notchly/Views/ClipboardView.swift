@@ -11,7 +11,7 @@ struct ClipboardView: View {
             VStack(spacing: 6) {
                 Image(systemName: "doc.on.clipboard")
                     .font(.system(size: 22, weight: .medium))
-                Text("Скопируйте что-нибудь — оно появится здесь")
+                Text(L("Скопируйте что-нибудь — оно появится здесь"))
                     .font(.system(size: 11.5))
             }
             .foregroundStyle(.white.opacity(0.45))
@@ -28,7 +28,7 @@ struct ClipboardView: View {
                                         expanded = expanded == group.id ? nil : group.id
                                     }
                                 }
-                                DismissButton(help: "Удалить всё из \(group.appName)") {
+                                DismissButton(help: L("Удалить всё из %@", "\(group.appName)")) {
                                     clipboard.remove(group: group)
                                 }
                             }
@@ -130,7 +130,7 @@ private struct ClipRow: View {
     var body: some View {
         HStack(spacing: 8) {
             if renaming {
-                InlineRenameField(initial: item.title ?? "", placeholder: "Название — например, «Адрес доставки»") { value in
+                InlineRenameField(initial: item.title ?? "", placeholder: L("Название — например, «Адрес доставки»")) { value in
                     guard renaming else { return }
                     renaming = false
                     onRename(value)
@@ -157,14 +157,14 @@ private struct ClipRow: View {
             Spacer(minLength: 6)
             ZStack {
                 if copied {
-                    Label("Скопировано", systemImage: "checkmark")
+                    Label(L("Скопировано"), systemImage: "checkmark")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.green)
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
                 } else if hovering && !renaming {
                     HStack(spacing: 10) {
-                        rowButton("pencil", help: "Переименовать") { renaming = true }
-                        rowButton("xmark", help: "Удалить", action: onDelete)
+                        rowButton("pencil", help: L("Переименовать")) { renaming = true }
+                        rowButton("xmark", help: L("Удалить"), action: onDelete)
                     }
                     .transition(.opacity)
                 } else if !renaming {
@@ -183,13 +183,13 @@ private struct ClipRow: View {
         .contentShape(Rectangle())
         .onTapGesture { if !renaming { onCopy() } }
         .contextMenu {
-            Button("Скопировать", action: onCopy)
-            Button("Переименовать…") { renaming = true }
+            Button(L("Скопировать"), action: onCopy)
+            Button(L("Переименовать…")) { renaming = true }
             Divider()
-            Button("Удалить", role: .destructive, action: onDelete)
+            Button(L("Удалить"), role: .destructive, action: onDelete)
         }
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
-        .help("Нажмите, чтобы скопировать")
+        .help(L("Нажмите, чтобы скопировать"))
     }
 
     private func rowButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
