@@ -538,7 +538,6 @@ struct BatteryGlyph: View {
     var width: CGFloat = 24
     /// Белая заливка без зелёного и красного — для карточки наушников.
     var monochrome = false
-    @ViewState private var fill: CGFloat = 0
 
     private var height: CGFloat { width * 0.46 }
     private var color: Color {
@@ -551,27 +550,14 @@ struct BatteryGlyph: View {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: height * 0.3, style: .continuous)
                     .stroke(.white.opacity(0.45), lineWidth: 1)
-                let inner = width - 4
+                // Статичная заливка без анимаций: так батарейка ничего не стоит процессору.
                 RoundedRectangle(cornerRadius: height * 0.16, style: .continuous)
                     .fill(color)
-                    .frame(width: max(2, inner * fill))
-                    .overlay {
-                        if charging {
-                            ChargingShimmer(travel: inner, cornerRadius: height * 0.16)
-                                .transition(.opacity)
-                        }
-                    }
+                    .frame(width: max(2, (width - 4) * CGFloat(percent) / 100))
                     .padding(2)
             }
             .frame(width: width, height: height)
             RoundedRectangle(cornerRadius: 1).fill(.white.opacity(0.45)).frame(width: 1.5, height: height * 0.38)
         }
-        .onAppear {
-            withAnimation(.smooth(duration: 1.2).delay(0.2)) { fill = CGFloat(percent) / 100 }
-        }
-        .onChange(of: percent) { _, value in
-            withAnimation(.smooth(duration: 1.0)) { fill = CGFloat(value) / 100 }
-        }
-        .animation(.easeInOut(duration: 0.4), value: charging)
     }
 }

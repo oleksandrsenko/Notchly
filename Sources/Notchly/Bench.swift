@@ -90,10 +90,72 @@ enum Bench {
         return nil
     }
 
+    /// `--bench open-cost`: сколько миллисекунд процессора главного потока уходит на одно открытие
+    /// и одно закрытие острова на каждой вкладке (среднее по 6 циклам, по 1,5 с на фазу).
+    @MainActor
+    static func openCost(tabs: [IslandTab]) async {
+        let model = IslandModel(persistent: false)
+        model.weather.debugSet(Weather(temperature: 18, high: 21, low: 12, code: 1, isDay: true, city: "Berlin",
+                                       latitude: 52.52, longitude: 13.40))
+        playTrack(model)
+        model.batteries.debugSet(devices: [], phone: nil, mac: BatteryInfo(percent: 64, charging: true, onAC: true))
+        let panel = makePanel(model)
+        await sleep(2)
+        for tab in tabs {
+            var open = 0.0, close = 0.0
+            let rounds = 6
+            for _ in 0..<rounds {
+                let a = cpuTimes().main
+                model.expand(to: tab)
+                await sleep(1.5)
+                let b = cpuTimes().main
+                model.collapse()
+                await sleep(1.5)
+                let c = cpuTimes().main
+                open += b - a
+                close += c - b
+            }
+            print(String(format: "%-14@ открытие %5.0f мс   закрытие %5.0f мс", tab.rawValue as NSString,
+                         open / Double(rounds) * 1000, close / Double(rounds) * 1000))
+            for h in CountingHosting.all {
+                print(String(format: "   кадров SwiftUI на цикл: %d, из них %.0f мс в layout()", h.frames / rounds, h.time / Double(rounds) * 1000))
+                h.frames = 0; h.time = 0
+            }
+            fflush(stdout)
+        }
+        panel.orderOut(nil)
+    }
+
+    @MainActor
+    private static func makePanel(_ model: IslandModel) -> NotchPanel {
+        let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
+        if screen.safeAreaInsets.top > 0, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
+            model.notchSize = CGSize(width: screen.frame.width - l.width - r.width, height: screen.safeAreaInsets.top)
+        } else {
+            model.notchSize = CGSize(width: 190, height: 32)
+            model.hasPhysicalNotch = false
+        }
+        let panel = NotchPanel()
+        let hosting = CountingHosting(rootView: IslandRootView(model: model, media: model.media))
+        hosting.sizingOptions = []
+        panel.contentView = hosting
+        CountingHosting.all = [hosting]
+        let size = IslandMetrics.windowSize
+        panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
+                              width: size.width, height: size.height), display: true)
+        panel.ignoresMouseEvents = false
+        panel.orderFrontRegardless()
+        return panel
+    }
+
     /// Запускается внутри NSApplication.run(), как живое приложение: вложенный RunLoop меняет частоту кадров.
     @MainActor
     static func run(names: [String], seconds: Double) async {
         SnapshotFlags.isRendering = false
+        if names.first == "open-cost" {
+            let tabs = names.dropFirst().compactMap(IslandTab.init(rawValue:))
+            return await openCost(tabs: tabs.isEmpty ? [.home, .music, .notes, .timer, .controls, .clipboard] : tabs)
+        }
         let selected = names.isEmpty ? scenarios : scenarios.filter { names.contains($0.name) }
         for scenario in selected {
             let (total, main) = await measure(scenario, seconds: seconds)
@@ -111,23 +173,8 @@ enum Bench {
         let model = IslandModel(persistent: false)
         model.weather.debugSet(Weather(temperature: 18, high: 21, low: 12, code: 1, isDay: true, city: "Berlin",
                                        latitude: 52.52, longitude: 13.40))
-        let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
-        if screen.safeAreaInsets.top > 0, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
-            model.notchSize = CGSize(width: screen.frame.width - l.width - r.width, height: screen.safeAreaInsets.top)
-        } else {
-            model.notchSize = CGSize(width: 190, height: 32)
-            model.hasPhysicalNotch = false
-        }
-        let panel = NotchPanel()
-        let hosting = NSHostingView(rootView: IslandRootView(model: model, media: model.media))
-        hosting.sizingOptions = []
-        panel.contentView = hosting
-        let size = IslandMetrics.windowSize
-        panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
-                              width: size.width, height: size.height), display: true)
-        panel.ignoresMouseEvents = false
-        panel.orderFrontRegardless()
-
+        let panel = makePanel(model)
+        let hosting = panel.contentView!
         scenario.setup(model, hosting)
         await sleep(2.5)
 
@@ -168,5 +215,18 @@ enum Bench {
         let main = Double(info.user_time.seconds + info.system_time.seconds)
             + Double(info.user_time.microseconds + info.system_time.microseconds) / 1_000_000
         return (total, main)
+    }
+}
+
+/// Считает кадры SwiftUI (вызовы layout()) и время на них.
+final class CountingHosting: NSHostingView<IslandRootView> {
+    static var all: [CountingHosting] = []
+    var frames = 0
+    var time = 0.0
+    override func layout() {
+        let t = CACurrentMediaTime()
+        super.layout()
+        time += CACurrentMediaTime() - t
+        frames += 1
     }
 }
