@@ -204,7 +204,7 @@ Everything stays on your Mac: no server, no analytics, no telemetry. Secrets liv
 ## Build & run
 
 ```bash
-git clone https://github.com/<you>/Notchly.git && cd Notchly
+git clone https://github.com/oleksandrsenko/Notchly.git && cd Notchly
 ./scripts/setup-signing.sh   # once: a local signing certificate, so permissions survive rebuilds
 ./build.sh                   # universal build/Notchly.app
 open build/Notchly.app

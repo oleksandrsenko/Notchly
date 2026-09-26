@@ -204,7 +204,7 @@
 ## Сборка и запуск
 
 ```bash
-git clone https://github.com/<you>/Notchly.git && cd Notchly
+git clone https://github.com/oleksandrsenko/Notchly.git && cd Notchly
 ./scripts/setup-signing.sh   # один раз: локальный сертификат, чтобы доступы не сбрасывались после сборки
 ./build.sh                   # универсальный build/Notchly.app
 open build/Notchly.app
