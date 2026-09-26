@@ -18,7 +18,7 @@ missing, loose = set(), []
 service = re.compile(r'NSLog\(|print\(|\bdone\(|lines\.append|var lines|label ==|label:|device_battery|'
                      r'contains \{ lower|"description":|requestBody\(for:|tasks\.add\(|fired\.append|report\.append')
 for f in sorted(root.rglob("*.swift")):
-    if f.name in ("English.swift", "Localization.swift", "Snapshots.swift"):
+    if f.name in ("English.swift", "Localization.swift", "Snapshots.swift", "Bench.swift"):
         continue
     for n, line in enumerate(f.read_text().splitlines(), 1):
         code = line.split("//")[0] if not line.strip().startswith('"') else line

@@ -20,6 +20,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             exit(0)
         }
+        if let i = CommandLine.arguments.firstIndex(of: "--bench") {
+            let rest = CommandLine.arguments[(i + 1)...]
+            var seconds = 8.0
+            if let j = rest.firstIndex(of: "--seconds"), j + 1 < CommandLine.arguments.count {
+                seconds = Double(CommandLine.arguments[j + 1]) ?? seconds
+            }
+            let names = rest.filter { !$0.hasPrefix("--") && Double($0) == nil }
+            let app = NSApplication.shared
+            app.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                await Bench.run(names: Array(names), seconds: seconds)
+                exit(0)
+            }
+            app.run()
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshots"), i + 1 < CommandLine.arguments.count {
             MainActor.assumeIsolated {
                 Snapshots.render(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
