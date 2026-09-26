@@ -13,9 +13,6 @@
   clipboard, files and system controls, one hover away. Native SwiftUI, no Electron, no Xcode required.
 </p>
 
-<p align="center">
-  <img src="docs/notchly.gif" width="760" alt="The island opening from the notch">
-</p>
 
 <p align="center">
   <img src="docs/screenshots/en/4-home.png" width="720" alt="Home tab">
