@@ -86,7 +86,8 @@ struct TimerView: View {
     private var focusPage: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             HStack(spacing: 22) {
-                BigRing(progress: focus.progress(at: ctx.date), tint: FocusCompactView.tint(for: focus.phase),
+                BigRing(progress: focus.progress(at: ctx.date), rate: focus.progressRate(at: ctx.date),
+                        tint: FocusCompactView.tint(for: focus.phase),
                         time: focus.remaining(at: ctx.date).clock, caption: focus.isActive ? focus.phase.title : L("25 мин"),
                         dimmed: focus.isPaused)
                 VStack(alignment: .leading, spacing: 9) {
@@ -167,7 +168,8 @@ struct TimerView: View {
     private var timerPage: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             HStack(spacing: 22) {
-                BigRing(progress: countdown.progress(at: ctx.date), tint: CountdownCompactView.tint,
+                BigRing(progress: countdown.progress(at: ctx.date), rate: countdown.progressRate(at: ctx.date),
+                        tint: CountdownCompactView.tint,
                         time: countdown.remaining(at: ctx.date).clock,
                         caption: countdown.isActive ? (countdown.isPaused ? L("Пауза") : L("Осталось")) : L("Таймер"),
                         dimmed: countdown.isPaused)
@@ -347,6 +349,8 @@ private struct NumberWheel: View {
 /// Большое кольцо с отсчётом в центре.
 private struct BigRing: View {
     var progress: Double
+    /// Прирост прогресса в секунду: дугу дальше ведёт Core Animation.
+    var rate: Double
     var tint: Color
     var time: String
     var caption: String
@@ -355,11 +359,7 @@ private struct BigRing: View {
     var body: some View {
         ZStack {
             Circle().stroke(.white.opacity(0.1), lineWidth: 6)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 1), value: progress)
+            CountdownArc(progress: progress, rate: rate, tint: tint, lineWidth: 6)
             VStack(spacing: 0) {
                 Text(time)
                     .font(.system(size: 26, weight: .semibold, design: .rounded))

@@ -37,6 +37,11 @@ final class CountdownTimer: ObservableObject {
         return 1 - remaining(at: now) / runningDuration
     }
 
+    /// На сколько прогресс вырастет за секунду (0 — на паузе): по нему дугу ведёт Core Animation.
+    func progressRate(at now: Date = Date()) -> Double {
+        max(0, progress(at: now.addingTimeInterval(1)) - progress(at: now))
+    }
+
     func start(seconds: Int? = nil) {
         if let seconds { setSeconds(seconds) }
         runningDuration = TimeInterval(self.seconds)

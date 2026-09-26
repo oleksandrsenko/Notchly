@@ -177,9 +177,8 @@ private struct WeatherCard: View {
                         .font(.system(size: 30, weight: .semibold, design: .rounded))
                         .contentTransition(.numericText(value: Double(w.temperature)))
                     Spacer(minLength: 6)
-                    Image(systemName: w.symbol)
-                        .symbolRenderingMode(.multicolor)
-                        .font(.system(size: 22))
+                    // Пульс крутит Core Animation, а не SwiftUI: иначе остров перерисовывался бы каждый кадр.
+                    PulsingSymbol(name: w.symbol, pointSize: 22, multicolor: true, speed: 0.3)
                 }
                 Text(w.summary)
                     .font(.system(size: 11, weight: .semibold))

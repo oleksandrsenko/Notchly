@@ -130,11 +130,8 @@ struct FocusCompactView: View {
             HStack(spacing: 0) {
                 ZStack {
                     Circle().stroke(.white.opacity(0.15), lineWidth: 2.5)
-                    Circle()
-                        .trim(from: 0, to: focus.progress(at: context.date))
-                        .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 1), value: focus.progress(at: context.date))
+                    CountdownArc(progress: focus.progress(at: context.date),
+                                 rate: focus.progressRate(at: context.date), tint: tint, lineWidth: 2.5)
                     Image(systemName: focus.phase.isBreak ? "cup.and.saucer.fill" : "timer")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)
@@ -165,11 +162,8 @@ struct CountdownCompactView: View {
             HStack(spacing: 0) {
                 ZStack {
                     Circle().stroke(.white.opacity(0.15), lineWidth: 2.5)
-                    Circle()
-                        .trim(from: 0, to: countdown.progress(at: context.date))
-                        .stroke(Self.tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 1), value: countdown.progress(at: context.date))
+                    CountdownArc(progress: countdown.progress(at: context.date),
+                                 rate: countdown.progressRate(at: context.date), tint: Self.tint, lineWidth: 2.5)
                     Image(systemName: "hourglass")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)

@@ -555,6 +555,12 @@ struct BatteryGlyph: View {
                 RoundedRectangle(cornerRadius: height * 0.16, style: .continuous)
                     .fill(color)
                     .frame(width: max(2, inner * fill))
+                    .overlay {
+                        if charging {
+                            ChargingShimmer(travel: inner, cornerRadius: height * 0.16)
+                                .transition(.opacity)
+                        }
+                    }
                     .padding(2)
             }
             .frame(width: width, height: height)

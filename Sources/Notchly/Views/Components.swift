@@ -72,35 +72,6 @@ extension View {
     func staggered(_ index: Int) -> some View { modifier(StaggeredAppear(index: index)) }
 }
 
-/// Эквалайзер, который «танцует», пока играет музыка.
-struct EqualizerView: View {
-    var isPlaying: Bool
-    var color: Color
-    var bars = 4
-
-    private let speeds: [Double] = [5.1, 7.3, 4.2, 6.4, 5.7]
-    private let phases: [Double] = [0, 1.7, 3.1, 0.8, 2.4]
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !isPlaying)) { ctx in
-            let t = ctx.date.timeIntervalSinceReferenceDate
-            GeometryReader { geo in
-                HStack(alignment: .center, spacing: geo.size.width * 0.12) {
-                    ForEach(0..<bars, id: \.self) { i in
-                        let wave = abs(sin(t * speeds[i % 5] + phases[i % 5])) * 0.6
-                            + abs(sin(t * speeds[(i + 2) % 5] * 0.53)) * 0.4
-                        Capsule()
-                            .fill(color.gradient)
-                            .frame(height: geo.size.height * (isPlaying ? 0.22 + 0.78 * wave : 0.2))
-                    }
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-            }
-        }
-        .animation(.easeOut(duration: 0.3), value: isPlaying)
-    }
-}
-
 /// Кнопка-иконка: при наведении слегка увеличивается, при нажатии «проседает» и подпрыгивает.
 struct IconButton: View {
     var systemName: String

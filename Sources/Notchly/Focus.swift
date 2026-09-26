@@ -68,6 +68,11 @@ final class FocusTimer: ObservableObject {
         return 1 - remaining(at: now) / phase.duration
     }
 
+    /// На сколько прогресс вырастет за секунду (0 — на паузе): по нему дугу ведёт Core Animation.
+    func progressRate(at now: Date = Date()) -> Double {
+        max(0, progress(at: now.addingTimeInterval(1)) - progress(at: now))
+    }
+
     func start(taskID: UUID? = nil, title: String? = nil) {
         self.taskID = taskID
         taskTitle = title

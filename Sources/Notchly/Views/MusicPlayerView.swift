@@ -91,35 +91,41 @@ private struct ProgressSection: View {
     @ViewState private var hovering = false
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
-            let duration = max(media.duration, 0.01)
-            let position = scrub ?? media.position(at: ctx.date)
-            let fraction = media.duration > 0 ? min(position / duration, 1) : 0
-            VStack(spacing: 5) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.18))
+        let duration = max(media.duration, 0.01)
+        VStack(spacing: 5) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.18))
+                    if let scrub {
                         Capsule()
                             .fill(Color.white)
-                            .frame(width: geo.size.width * fraction)
-                            .animation(scrub == nil ? .linear(duration: 0.5) : nil, value: fraction)
+                            .frame(width: geo.size.width * (media.duration > 0 ? min(scrub / duration, 1) : 0))
+                    } else {
+                        // Во время воспроизведения полоса растёт сама, силами Core Animation.
+                        TrackProgressFill(fraction: media.duration > 0 ? min(media.elapsed / duration, 1) : 0,
+                                          date: media.timestamp,
+                                          rate: media.isPlaying && media.duration > 0 ? 1 / duration : 0)
                     }
-                    .frame(height: hovering || scrub != nil ? 8 : 5)
-                    .frame(maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0)
-                        .onChanged { g in
-                            guard media.duration > 0 else { return }
-                            scrub = min(max(g.location.x / geo.size.width, 0), 1) * media.duration
-                        }
-                        .onEnded { _ in
-                            if let scrub { media.seek(to: scrub) }
-                            scrub = nil
-                        })
-                    .onHover { h in withAnimation(.spring(response: 0.25)) { hovering = h } }
                 }
-                .frame(height: 12)
+                .frame(height: hovering || scrub != nil ? 8 : 5)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0)
+                    .onChanged { g in
+                        guard media.duration > 0 else { return }
+                        scrub = min(max(g.location.x / geo.size.width, 0), 1) * media.duration
+                    }
+                    .onEnded { _ in
+                        if let scrub { media.seek(to: scrub) }
+                        scrub = nil
+                    })
+                .onHover { h in withAnimation(.spring(response: 0.25)) { hovering = h } }
+            }
+            .frame(height: 12)
 
+            // Подписи меняются ровно тогда, когда позиция переходит через целую секунду.
+            TimelineView(TrackSecondsSchedule(elapsed: media.elapsed, timestamp: media.timestamp, playing: media.isPlaying)) { ctx in
+                let position = scrub ?? media.position(at: ctx.date)
                 HStack {
                     Text(formatTime(position))
                     Spacer()
