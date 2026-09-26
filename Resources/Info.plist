@@ -36,6 +36,8 @@
     <string>Нужно, чтобы напоминать о встречах за 10 и 5 минут.</string>
     <key>NSCalendarsUsageDescription</key>
     <string>Нужно, чтобы напоминать о встречах за 10 и 5 минут.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Нужно, чтобы сохранять снимки экрана с рабочего стола в буфер обмена Notchly (если вы это включили).</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Нужно, чтобы показывать и переключать треки в Apple Music и Spotify.</string>
 </dict>

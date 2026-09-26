@@ -249,16 +249,17 @@ struct ServiceLogo: View {
     private func glyph(_ s: CGFloat) -> some View {
         switch name {
         case "Spotify":
-            // Три дуги Spotify.
+            // Круг и три дуги строго по центру, как у YouTube Music: дуги симметричные, без наклона.
             ZStack {
+                Circle().stroke(lineWidth: s * 0.05).frame(width: s * 0.56, height: s * 0.56)
                 ForEach(0..<3, id: \.self) { i in
-                    let half = [0.25, 0.21, 0.17][i], y = [0.38, 0.51, 0.63][i], top = [0.28, 0.43, 0.56][i]
+                    let half = [0.165, 0.135, 0.105][i], y = [0.45, 0.54, 0.625][i]
                     Path { p in
                         p.move(to: CGPoint(x: (0.5 - half) * s, y: y * s))
-                        p.addQuadCurve(to: CGPoint(x: (0.5 + half) * s, y: (y + 0.04) * s),
-                                       control: CGPoint(x: 0.5 * s, y: top * s))
+                        p.addQuadCurve(to: CGPoint(x: (0.5 + half) * s, y: y * s),
+                                       control: CGPoint(x: 0.5 * s, y: (y - 0.075) * s))
                     }
-                    .stroke(style: StrokeStyle(lineWidth: [0.07, 0.06, 0.05][i] * s, lineCap: .round))
+                    .stroke(style: StrokeStyle(lineWidth: [0.052, 0.045, 0.04][i] * s, lineCap: .round))
                 }
             }
         case "YouTube Music":
@@ -272,19 +273,29 @@ struct ServiceLogo: View {
                 }
             }
         default:
-            // Двойная нота Apple Music.
+            // Двойная нота Apple Music: две ножки под общей скошенной перекладиной.
+            // Рисунок собран в квадрате 0.26…0.74, так что стоит ровно по центру.
             ZStack {
                 Path { p in
-                    p.move(to: CGPoint(x: 0.41 * s, y: 0.64 * s))
-                    p.addLine(to: CGPoint(x: 0.41 * s, y: 0.32 * s))
-                    p.addLine(to: CGPoint(x: 0.67 * s, y: 0.27 * s))
-                    p.addLine(to: CGPoint(x: 0.67 * s, y: 0.59 * s))
+                    // Перекладина — залитая полоса, как в оригинале.
+                    p.move(to: CGPoint(x: 0.425 * s, y: 0.335 * s))
+                    p.addLine(to: CGPoint(x: 0.705 * s, y: 0.275 * s))
+                    p.addLine(to: CGPoint(x: 0.705 * s, y: 0.345 * s))
+                    p.addLine(to: CGPoint(x: 0.425 * s, y: 0.405 * s))
+                    p.closeSubpath()
                 }
-                .stroke(style: StrokeStyle(lineWidth: s * 0.05, lineCap: .round, lineJoin: .round))
-                Ellipse().frame(width: s * 0.15, height: s * 0.115).rotationEffect(.degrees(-18))
-                    .position(x: 0.35 * s, y: 0.655 * s)
-                Ellipse().frame(width: s * 0.15, height: s * 0.115).rotationEffect(.degrees(-18))
-                    .position(x: 0.61 * s, y: 0.605 * s)
+                .fill()
+                Path { p in
+                    p.move(to: CGPoint(x: 0.425 * s, y: 0.36 * s))
+                    p.addLine(to: CGPoint(x: 0.425 * s, y: 0.66 * s))
+                    p.move(to: CGPoint(x: 0.705 * s, y: 0.30 * s))
+                    p.addLine(to: CGPoint(x: 0.705 * s, y: 0.60 * s))
+                }
+                .stroke(style: StrokeStyle(lineWidth: s * 0.045, lineCap: .round))
+                Ellipse().frame(width: s * 0.16, height: s * 0.12).rotationEffect(.degrees(-20))
+                    .position(x: 0.36 * s, y: 0.665 * s)
+                Ellipse().frame(width: s * 0.16, height: s * 0.12).rotationEffect(.degrees(-20))
+                    .position(x: 0.64 * s, y: 0.605 * s)
             }
         }
     }

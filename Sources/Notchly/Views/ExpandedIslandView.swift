@@ -37,18 +37,19 @@ struct ExpandedIslandView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 0) {
+        let settings = model.settings
+        return HStack(spacing: 0) {
             HStack(spacing: 4) {
-                ForEach(IslandTab.bar) { tab in
+                ForEach(settings.tabs(on: .leading)) { tab in
                     TabButton(tab: tab, selected: model.tab == tab, badge: badge(for: tab), ns: tabNS) {
-                        select(tab)
+                        select(model.tab == tab && tab != .home ? .home : tab)
                     }
                 }
             }
             .padding(.leading, 16)
             Spacer(minLength: model.notchSize.width + 20)
-            HStack(spacing: 8) {
-                ForEach(IslandTab.trailing) { tab in
+            HStack(spacing: 6) {
+                ForEach(settings.tabs(on: .trailing)) { tab in
                     TabButton(tab: tab, selected: model.tab == tab, badge: badge(for: tab), ns: tabNS) {
                         select(model.tab == tab ? .home : tab)
                     }
@@ -66,7 +67,7 @@ struct ExpandedIslandView: View {
     }
 
     private func select(_ tab: IslandTab) {
-        let all = IslandTab.allCases
+        let all = model.settings.visibleOrder
         let from = all.firstIndex(of: model.tab) ?? 0
         let to = all.firstIndex(of: tab) ?? 0
         tabDirection = to >= from ? .trailing : .leading
@@ -81,11 +82,13 @@ struct ExpandedIslandView: View {
         case .timer: TimerView(model: model, focus: model.focus, countdown: model.countdown,
                                alarms: model.alarms, tasks: model.tasks)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
-        case .notes: NotesView(store: model.notes, clipboard: model.clipboard, vault: model.vault,
-                                     tasks: model.tasks, gemini: model.gemini, focus: model.focus,
-                                     calendar: model.reminders.calendar)
+        case .notes: NotesView(store: model.notes, tasks: model.tasks, gemini: model.gemini, focus: model.focus,
+                               calendar: model.reminders.calendar)
+        case .clipboard: ClipboardTab(clipboard: model.clipboard, shots: model.clipboard.shots, vault: model.vault,
+                                      settings: model.settings)
         case .notifications: NotificationsView(gmail: model.gmail, system: model.systemNotifications)
-        case .controls: ControlsView(volume: model.volume, brightness: model.brightness, mixer: model.mixer)
+        case .controls: ControlsView(volume: model.volume, brightness: model.brightness, mixer: model.mixer,
+                                     openSettings: { SettingsWindowController.shared.show(model: model) })
         }
     }
 }

@@ -4,6 +4,7 @@ struct ControlsView: View {
     @ObservedObject var volume: VolumeController
     @ObservedObject var brightness: BrightnessController
     @ObservedObject var mixer: AppAudioMixer
+    var openSettings: () -> Void = {}
 
     private var volumeIcon: String {
         speakerIcon(volume.isMuted ? 0 : volume.volume)
@@ -28,7 +29,7 @@ struct ControlsView: View {
             }
             .frame(width: 240)
 
-            AppMixerList(mixer: mixer)
+            AppMixerList(mixer: mixer, openSettings: openSettings)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding(.horizontal, 8)
@@ -69,10 +70,29 @@ private func speakerIcon(_ level: Float) -> String {
 /// Приложения, которые сейчас играют звук, с отдельной громкостью и mute.
 private struct AppMixerList: View {
     @ObservedObject var mixer: AppAudioMixer
+    var openSettings: () -> Void
+    @ViewState private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionTitle("Приложения")
+            HStack {
+                sectionTitle("Приложения")
+                Spacer()
+                // Настройки Notchly открываются отдельным окном, а остров остаётся раскрытым —
+                // так изменения видно сразу.
+                Button(action: openSettings) {
+                    Label("Настройки", systemImage: "gearshape.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
+                        .padding(.horizontal, 9)
+                        .frame(height: 20)
+                        .background(Capsule().fill(.white.opacity(hovering ? 0.14 : 0.07)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+                .help("Настройки Notchly: вкладки, функции, уведомления, буфер обмена")
+            }
             if mixer.access == .denied {
                 notice(icon: "waveform.badge.exclamationmark",
                        text: "Разрешите запись системного аудио, чтобы менять громкость приложений",

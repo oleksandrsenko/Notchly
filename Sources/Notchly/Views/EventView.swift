@@ -52,9 +52,9 @@ struct EventView: View {
         case .timerDone(let duration):
             ActionCard(symbol: "hourglass.bottomhalf.filled", tint: .orange,
                        title: "Таймер завершён",
-                       subtitle: "\(Int(duration / 60)) мин") {
+                       subtitle: duration.durationText) {
                 CardButton(title: "Ещё раз", systemImage: "arrow.clockwise") {
-                    model.countdown.start(minutes: Int(duration / 60))
+                    model.countdown.start(seconds: Int(duration.rounded()))
                     model.dismissEvent()
                 }
                 CardButton(title: "Готово", prominent: true) { model.dismissEvent() }
@@ -536,10 +536,15 @@ struct BatteryGlyph: View {
     var percent: Int
     var charging = false
     var width: CGFloat = 24
+    /// Белая заливка без зелёного и красного — для карточки наушников.
+    var monochrome = false
     @ViewState private var fill: CGFloat = 0
 
     private var height: CGFloat { width * 0.46 }
-    private var color: Color { charging ? .green : percent <= 20 ? .red : .green }
+    private var color: Color {
+        if monochrome { return .white.opacity(0.9) }
+        return charging ? .green : percent <= 20 ? .red : .green
+    }
 
     var body: some View {
         HStack(spacing: 1) {

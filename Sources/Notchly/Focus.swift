@@ -166,4 +166,15 @@ extension TimeInterval {
         let total = Int(self.rounded(.up))
         return String(format: "%d:%02d", total / 60, total % 60)
     }
+
+    /// «1 мин 30 с», «10 мин», «45 с», «1 ч 5 мин».
+    var durationText: String {
+        let total = Int(self.rounded())
+        let h = total / 3600, m = total % 3600 / 60, s = total % 60
+        var parts: [String] = []
+        if h > 0 { parts.append("\(h) ч") }
+        if m > 0 { parts.append("\(m) мин") }
+        if s > 0 && h == 0 { parts.append("\(s) с") }
+        return parts.isEmpty ? "0 с" : parts.joined(separator: " ")
+    }
 }

@@ -130,7 +130,7 @@ struct IslandRootView: View {
             CountdownCompactView(countdown: model.countdown, notchWidth: model.notchSize.width)
                 .frame(width: body.width, height: body.height)
                 .transition(Self.compactTransition)
-        } else if media.showsLiveActivity || (model.peek && media.hasTrack) {
+        } else if model.showsMusicActivity || (model.peek && media.hasTrack) {
             CompactMusicView(media: media, model: model)
                 .frame(width: body.width, height: body.height)
                 .transition(Self.compactTransition)

@@ -8,6 +8,8 @@ Notchly lives in the most visible spot on your screen and touches personal thing
 |---|---|---|
 | Tasks, notes, file shelf, alarms | `~/Library/Application Support/Notchly/*.json` — folder `700`, files `600` (owner only) | only you |
 | Clipboard history | `~/Library/Application Support/Notchly/clipboard.json` (`600`), auto-expires | only you |
+| Screenshots & copied images | `~/Library/Application Support/Notchly/Screenshots/` — folder `700`, files `600`; kept 1–7 days (3 by default), at most 40 | only you |
+| Settings | `UserDefaults` (`dev.notchly.app`) — tab layout and on/off switches, no personal data | only you |
 | Gmail app password, Gemini API key | macOS Keychain, *this device only* (never synced to iCloud), readable only while the Mac is unlocked | only Notchly, after macOS asks you |
 | API key vault | macOS Keychain, unlocked with Touch ID / Mac password, auto-locks after 2 minutes | only you |
 | App notifications | read-only from macOS Notification Center database | never copied or sent anywhere |
@@ -17,7 +19,7 @@ There is **no server, no analytics, no telemetry, no crash reporting.**
 
 ## Secrets never touch the disk in plain text
 
-<img src="docs/screenshots/4-notes-vault.png" width="640" alt="API key vault locked behind Touch ID">
+<img src="docs/screenshots/4-clipboard-vault.png" width="640" alt="API key vault locked behind Touch ID">
 
 - The API key vault is locked by default. Opening it requires Touch ID or the Mac password (`LocalAuthentication`), and it locks itself again after two minutes or whenever the island closes.
 - Keys are stored as a single Keychain item, never in `UserDefaults` or files.
@@ -25,11 +27,19 @@ There is **no server, no analytics, no telemetry, no crash reporting.**
 
 ## Clipboard history you control
 
-<img src="docs/screenshots/4-notes-clipboard.png" width="640" alt="Clipboard history grouped by app">
+<img src="docs/screenshots/4-clipboard.png" width="640" alt="Clipboard history grouped by app">
 
 - Entries marked as concealed or transient by password managers (`org.nspasteboard.ConcealedType`, 1Password, etc.) are **never recorded**.
-- History expires automatically; the retention period is set from the menu-bar menu, and *Clear* wipes it at once.
-- Each entry can be deleted individually.
+- History expires automatically; the retention period is set in *Settings → Clipboard*. *Clear* asks once more before wiping everything, so a stray click can't erase it.
+- Each entry can be deleted individually, and text history can be switched off completely.
+
+### Screenshots
+
+<img src="docs/screenshots/4-clipboard-shots.png" width="640" alt="Recent screenshots in the clipboard tab">
+
+- Screenshots taken to the clipboard (⌃⇧⌘4) and copied images are kept in a separate *Screenshots* section — as owner-only files, for a few days (1, 2, 3 or 7; 3 by default), and never more than 40 of them. Old ones are deleted automatically.
+- Screenshots saved to the Desktop are picked up **only if you turn it on**. Notchly then finds new screen captures with a local Spotlight query (`kMDItemIsScreenCapture`) — it does not scan your folders — and copies them; the originals stay where they are. macOS asks for Desktop access the first time.
+- Images are never uploaded anywhere. Pasteboard items marked concealed by password managers are skipped here too.
 
 ## Notifications: read-only, and quiet while you focus
 
@@ -64,14 +74,17 @@ Nothing else goes over the network.
 | Calendars | reminders before meetings | only task reminders |
 | Bluetooth | headphone battery | no headphone card |
 | Location | local weather | approximate location by IP (`ipapi.co`) |
+| Desktop folder | copying screenshots saved to the Desktop — only if you enable it | only clipboard screenshots |
 
 Every permission is optional; Notchly degrades gracefully.
 
-**Asked only when needed.** At first launch macOS asks only for Bluetooth (headphone connections). Accessibility is requested once — never again on later launches. Calendar access is asked the first time you open *Tasks*, precise location only when you tap the weather card, audio capture only once a per-app volume is actually changed (or a saved one is restored).
+**Asked only when needed.** At first launch macOS asks only for Bluetooth (headphone connections). Accessibility is requested once — never again on later launches. Calendar access is asked the first time you open *Tasks*, precise location only when you tap the weather card, audio capture only once a per-app volume is actually changed (or a saved one is restored), Desktop access only after you turn on Desktop screenshots.
+
+Every feature that shows something on the island — HUDs, charging and headphone cards, app and Gmail notifications, reminders, the chime — can be switched off in *Settings*.
 
 ## Deleting your data
 
-1. Quit Notchly from the menu-bar icon.
+1. Quit Notchly (menu-bar icon → *Quit*, or *Settings → About Notchly → Quit*).
 2. Delete `~/Library/Application Support/Notchly/`.
 3. In *Keychain Access*, search for `dev.notchly.app` and delete the items.
-4. Optionally reset preferences: `defaults delete dev.notchly.app`.
+4. Optionally reset preferences and settings: `defaults delete dev.notchly.app`.

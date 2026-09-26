@@ -226,7 +226,7 @@ private extension String {
 /// Одна карточка заряда, которую можно листать: MacBook ↔ наушники ↔ мышь и другие устройства ↔ iPhone.
 private struct BatteryCarousel: View {
     var mac: BatteryInfo?
-    var headphones: DeviceBattery?
+    var headphones: [DeviceBattery]
     var accessories: [DeviceBattery]
     var phone: PhoneBattery?
     @ViewState private var page: Int? = SnapshotFlags.batteryPage
@@ -235,7 +235,7 @@ private struct BatteryCarousel: View {
 
     private var pages: [Page] {
         var result: [Page] = [.mac]
-        if let headphones { result.append(.headphones(headphones)) }
+        result += headphones.map(Page.headphones)
         result += accessories.map(Page.accessory)
         if let phone { result.append(.phone(phone)) }
         return result
@@ -374,16 +374,13 @@ private struct BatteryCarousel: View {
                                  symbol: casing.symbol.isEmpty ? "airpodspro.chargingcase.wireless.fill" : casing.symbol)
                             .help("Кейс")
                     }
-                    if !device.isConnected { disconnectedNote }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
+                // AirPods Max и прочие наушники: один процент, а если система его не сообщила — просто «Подключены».
                 let level = device.primaryLevel
-                VStack(alignment: .leading, spacing: 3) {
-                    info(title: name, percent: level?.percent, note: nil,
-                         color: level.map { Self.levelColor($0.percent) })
-                    if !device.isConnected { disconnectedNote }
-                }
+                info(title: name, percent: level?.percent, note: level == nil ? "Подключены" : nil,
+                     monochrome: true)
             }
         }
         .padding(.horizontal, 14)
@@ -399,28 +396,21 @@ private struct BatteryCarousel: View {
             Text("\(percent)%")
                 .font(.system(size: 18, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(Self.levelColor(percent))
+                .foregroundStyle(.white)
                 .contentTransition(.numericText(value: Double(percent)))
                 .animation(.smooth(duration: 0.6), value: percent)
                 .frame(minWidth: 50, alignment: .leading)
-            BatteryGlyph(percent: percent, charging: charging, width: 24)
+            BatteryGlyph(percent: percent, charging: charging, width: 24, monochrome: true)
         }
     }
-
-    private var disconnectedNote: some View {
-        Text("Не подключены")
-            .font(.system(size: 9.5, weight: .light))
-            .foregroundStyle(.white.opacity(0.4))
-    }
-
-    static func levelColor(_ percent: Int) -> Color { BatteryTint.color(percent) }
 
     /// Для AirPods — только кейс; для остальных наушников — их рисунок (AirPods Max — в цвете Midnight).
     private func headphonesArt(_ device: DeviceBattery) -> some View {
         DeviceArt(kind: DeviceArt.Kind(device: device), open: 0, width: 56)
     }
 
-    private func info(title: String, percent: Int?, charging: Bool = false, note: String?, color: Color? = nil) -> some View {
+    private func info(title: String, percent: Int?, charging: Bool = false, note: String?,
+                      monochrome: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
@@ -431,10 +421,10 @@ private struct BatteryCarousel: View {
                     Text("\(percent)%")
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(color ?? .white)
+                        .foregroundStyle(.white)
                         .contentTransition(.numericText(value: Double(percent)))
                         .animation(.smooth(duration: 0.6), value: percent)
-                    BatteryGlyph(percent: percent, charging: charging, width: 28)
+                    BatteryGlyph(percent: percent, charging: charging, width: 28, monochrome: monochrome)
                 }
             }
             if let note, !note.isEmpty {

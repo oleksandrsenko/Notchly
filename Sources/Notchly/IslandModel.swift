@@ -2,14 +2,9 @@ import AppKit
 import SwiftUI
 import Combine
 
-enum IslandTab: String, CaseIterable, Identifiable {
-    // Порядок совпадает с шапкой слева направо — от него зависит направление перелистывания.
-    case home, music, timer, notes, shelf, controls, notifications
+enum IslandTab: String, CaseIterable, Identifiable, Codable {
+    case home, music, timer, notes, clipboard, shelf, controls, notifications
     var id: String { rawValue }
-
-    /// Вкладки в шапке слева. Справа, рядом с колокольчиком, — «Файлы» и «Управление».
-    static let bar: [IslandTab] = [.home, .music, .timer, .notes]
-    static let trailing: [IslandTab] = [.shelf, .controls]
 
     var icon: String {
         switch self {
@@ -18,6 +13,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .timer: return "timer"
         case .shelf: return "folder.fill"
         case .notes: return "note.text"
+        case .clipboard: return "doc.on.clipboard.fill"
         case .controls: return "slider.horizontal.3"
         case .notifications: return "bell.fill"
         }
@@ -29,7 +25,8 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .music: return "Музыка"
         case .timer: return "Таймер"
         case .shelf: return "Файлы"
-        case .notes: return "Заметки"
+        case .notes: return "Заметки и задачи"
+        case .clipboard: return "Буфер обмена"
         case .controls: return "Управление"
         case .notifications: return "Уведомления"
         }
@@ -48,6 +45,14 @@ enum IslandEvent: Equatable {
     case focus(FocusTimer.Transition)
     case timerDone(TimeInterval)
     case alarm(Alarm)
+
+    /// Имя наушников, если это карточка подключения.
+    var deviceName: String? {
+        switch self {
+        case .device(let d), .deviceSheet(let d): return d.name
+        default: return nil
+        }
+    }
 
     /// Окно, которое не закрывается по нажатию (в нём свои кнопки).
     var isDevice: Bool { if case .deviceSheet = self { return true } else { return false } }
@@ -84,7 +89,7 @@ enum IslandEvent: Equatable {
     var duration: TimeInterval {
         switch self {
         case .charging: return 4.5
-        case .device: return 4
+        case .device: return 6
         case .deviceSheet: return 10
         case .notification: return 4
         case .reminder, .focus: return 8
@@ -180,6 +185,10 @@ final class IslandModel: ObservableObject {
     let focus = FocusTimer()
     let countdown = CountdownTimer()
     let alarms: AlarmStore
+    let settings: AppSettings
+    private let screenshotWatcher = ScreenshotFileWatcher()
+    /// Открыто окно настроек: остров стоит раскрытым, чтобы изменения было видно сразу.
+    @Published var settingsOpen = false
 
     private var hudTask: DispatchWorkItem?
     private var peekTask: DispatchWorkItem?
@@ -189,6 +198,7 @@ final class IslandModel: ObservableObject {
 
     /// persistent = false — для снапшотов: ничего не читаем и не пишем на диск.
     init(persistent: Bool = true) {
+        settings = AppSettings(persistent: persistent)
         clipboard = ClipboardMonitor(persistent: persistent)
         shelf = ShelfStore(persistent: persistent)
         notes = NotesStore(persistent: persistent)
@@ -200,21 +210,27 @@ final class IslandModel: ObservableObject {
 
         keys.handler = { [weak self] key, fine in self?.handleKey(key, fine: fine) }
         clipboard.onCopy = { [weak self] group in self?.showClipPeek(group) }
-        batteries.onChargerConnected = { [weak self] info in self?.showEvent(.charging(info)) }
-        batteries.onAudioDeviceConnected = { [weak self] device in self?.showEvent(.device(device)) }
+        batteries.onChargerConnected = { [weak self] info in
+            guard let self, self.settings.chargingCard else { return }
+            self.showEvent(.charging(info))
+        }
+        batteries.onAudioDeviceConnected = { [weak self] device in
+            guard let self, self.settings.headphonesCard else { return }
+            self.showEvent(.device(device))
+        }
         batteries.onAudioDeviceUpdated = { [weak self] device in self?.updateDevice(device) }
         systemNotifications.onNew = { [weak self] item in self?.showNotification(item) }
         reminders.onFire = { [weak self] reminder in self?.presentReminder(reminder) }
         focus.onTransition = { [weak self] transition in
-            SoftChime.play()
+            self?.chime()
             self?.presentWhenCollapsed(.focus(transition))
         }
         countdown.onFinish = { [weak self] duration in
-            SoftChime.play(times: 2)
+            self?.chime(times: 2)
             self?.presentWhenCollapsed(.timerDone(duration))
         }
         alarms.onFire = { [weak self] alarm in
-            SoftChime.play(times: 4)
+            self?.chime(times: 4)
             self?.presentWhenCollapsed(.alarm(alarm))
         }
         if persistent { alarms.start() }
@@ -230,6 +246,7 @@ final class IslandModel: ObservableObject {
             .store(in: &bag)
         if persistent { reminders.start() }
         gmail.onNew = { [weak self] mail in
+            guard self?.settings.gmailNotifications == true else { return }
             self?.showNotification(AppNotification(
                 id: "gmail-\(mail.id)", bundleID: AppNotification.gmailID, title: mail.senderName,
                 subtitle: "", body: mail.subject, date: mail.date))
@@ -242,6 +259,20 @@ final class IslandModel: ObservableObject {
             self?.showHUD(HUDState(kind: .brightness, value: value))
         }
         media.onTrackChange = { [weak self] in self?.trackChanged() }
+
+        applySettings()
+        settings.objectWillChange
+            .sink { [weak self] _ in
+                // objectWillChange приходит до изменения — применяем уже новые значения.
+                DispatchQueue.main.async {
+                    self?.applySettings()
+                    withAnimation(IslandMetrics.softSpring) { self?.objectWillChange.send() }
+                }
+            }
+            .store(in: &bag)
+        if persistent {
+            screenshotWatcher.onNew = { [weak self] url in self?.clipboard.shots.add(fileURL: url) }
+        }
 
         // Пересчитываем форму острова, когда меняется состояние плеера.
         media.$showsLiveActivity
@@ -289,7 +320,7 @@ final class IslandModel: ObservableObject {
         if focus.isActive || countdown.isActive {
             return CGSize(width: n.width + IslandMetrics.focusWing * 2, height: n.height)
         }
-        if media.showsLiveActivity {
+        if showsMusicActivity {
             return CGSize(width: n.width + IslandMetrics.compactWing * 2, height: n.height)
         }
         return n
@@ -298,6 +329,29 @@ final class IslandModel: ObservableObject {
     /// Полный размер фигуры с учётом изгибов у верхней кромки.
     var shapeSize: CGSize {
         CGSize(width: bodySize.width + topRadius * 2, height: bodySize.height)
+    }
+
+    /// Живая активность музыки в свёрнутом острове (можно выключить в настройках).
+    var showsMusicActivity: Bool { media.showsLiveActivity && settings.musicActivity }
+
+    // MARK: - Настройки
+
+    /// Переносит настройки в службы, которые о них знать не должны.
+    private func applySettings() {
+        clipboard.recordsText = settings.clipboardHistory
+        clipboard.recordsImages = settings.screenshots
+        keys.isEnabled = settings.hud
+        if settings.screenshots && settings.screenshotFiles && clipboard.shots.isPersistent {
+            screenshotWatcher.start()
+        } else {
+            screenshotWatcher.stop()
+        }
+        // Спрятанная вкладка не может оставаться открытой.
+        if !settings.isVisible(tab) { tab = .home }
+    }
+
+    private func chime(times: Int = 1) {
+        if settings.sounds { SoftChime.play(times: times) }
     }
 
     // MARK: - Состояния
@@ -310,8 +364,8 @@ final class IslandModel: ObservableObject {
     func expand(to tab: IslandTab? = nil) {
         if let tab {
             self.tab = tab
-        } else if !isExpanded {
-            // Каждое открытие начинается с главной.
+        } else if !isExpanded && settings.openOnHome {
+            // Каждое открытие начинается с главной (если так выбрано в настройках).
             self.tab = .home
         }
         guard !isExpanded || closing else { return }
@@ -344,7 +398,7 @@ final class IslandModel: ObservableObject {
     }
 
     func collapse() {
-        guard isExpanded else { return }
+        guard isExpanded, !settingsOpen else { return }
         vault.lock()
         guard !closing else { return }
         phaseWork?.cancel()
@@ -363,6 +417,11 @@ final class IslandModel: ObservableObject {
 
     func showEvent(_ event: IslandEvent) {
         guard !isExpanded else { return }
+        // Наушники сообщают о подключении по нескольку раз (разные профили Bluetooth). Повтор не должен
+        // заменять уже показанную карточку с зарядом на пустую — обновляем её на месте.
+        if case .device(let device) = event, let shown = self.event, shown.deviceName == device.name {
+            return updateDevice(device)
+        }
         // Пока показана одна карточка, следующие уведомления ждут своей очереди.
         if self.event != nil, event.isQueued {
             eventQueue.append(event)
@@ -400,7 +459,8 @@ final class IslandModel: ObservableObject {
 
     /// Напоминание звучит сразу; если остров сейчас открыт, карточка покажется, как только он закроется.
     private func presentReminder(_ reminder: Reminder) {
-        SoftChime.play()
+        guard settings.reminders else { return }
+        chime()
         presentWhenCollapsed(.reminder(reminder))
     }
 
@@ -414,12 +474,15 @@ final class IslandModel: ObservableObject {
 
     /// Во время фокуса уведомления приложений не всплывают — их число покажем в конце подхода.
     private func showNotification(_ item: AppNotification) {
+        guard item.bundleID == AppNotification.gmailID || settings.appNotifications else { return }
         if focus.isFocusing { return focus.holdNotification() }
         showEvent(.notification(item))
     }
 
     /// Заряд пришёл позже карточки — обновляем её на месте, не показывая заново.
     func updateDevice(_ device: DeviceBattery) {
+        // Пустой заряд не затирает уже известный.
+        guard !device.levels.isEmpty else { return }
         switch event {
         case .device(let shown) where shown.name == device.name:
             withAnimation(.smooth(duration: 0.3)) { event = .device(device) }
@@ -481,7 +544,7 @@ final class IslandModel: ObservableObject {
     }
 
     func showHUD(_ state: HUDState) {
-        guard !isExpanded, event == nil else { return }
+        guard !isExpanded, event == nil, settings.hud else { return }
         hudTask?.cancel()
         withAnimation(IslandMetrics.spring) {
             peek = false
@@ -513,7 +576,7 @@ final class IslandModel: ObservableObject {
     }
 
     func showClipPeek(_ group: ClipGroup) {
-        guard !isExpanded, hud == nil, event == nil else { return }
+        guard !isExpanded, hud == nil, event == nil, settings.copiedPeek else { return }
         clipTask?.cancel()
         withAnimation(IslandMetrics.spring) {
             peek = false
@@ -543,7 +606,7 @@ final class IslandModel: ObservableObject {
     }
 
     func showPeek() {
-        guard !isExpanded, hud == nil, event == nil, media.hasTrack else { return }
+        guard !isExpanded, hud == nil, event == nil, media.hasTrack, settings.trackPeek else { return }
         peekTask?.cancel()
         if !peek { withAnimation(IslandMetrics.softSpring) { peek = true } }
         let task = DispatchWorkItem { [weak self] in

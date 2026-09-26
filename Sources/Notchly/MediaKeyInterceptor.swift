@@ -9,6 +9,8 @@ final class MediaKeyInterceptor {
     /// Вызывается на главном потоке; второй аргумент — мелкий шаг (⌥⇧).
     var handler: ((Key, Bool) -> Void)?
     private(set) var isActive = false
+    /// Выключено в настройках — клавиши идут системе, и она показывает свой индикатор.
+    var isEnabled = true
 
     private var tap: CFMachPort?
     private var retryTimer: Timer?
@@ -60,6 +62,7 @@ final class MediaKeyInterceptor {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return pass
         }
+        guard isEnabled else { return pass }
 
         // На части клавиатур яркость приходит обычными кодами клавиш.
         if type == .keyDown || type == .keyUp {

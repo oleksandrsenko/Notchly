@@ -6,6 +6,8 @@ enum SnapshotFlags {
     static var openedTask: UUID?
     static var notesMode: NotesView.Mode = .notes
     static var timerMode: TimerView.Mode = .focus
+    static var clipboardMode: ClipboardTab.Mode = .history
+    static var settingsPane: SettingsView.Pane = .general
 }
 
 /// `Notchly --snapshots <папка>` рендерит все состояния острова в PNG —
@@ -84,8 +86,8 @@ enum Snapshots {
             DeviceBattery(name: "AirPods Pro", symbol: "airpodspro", levels: [
                 .init(label: "Левый", symbol: "airpod.left", percent: 100),
                 .init(label: "Правый", symbol: "airpod.right", percent: 18),
-                .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 64, charging: true)],
-                isConnected: false),
+                .init(label: "Кейс", symbol: "airpodspro.chargingcase.wireless.fill", percent: 64, charging: true)]),
+            DeviceBattery(name: "AirPods Max", symbol: "airpodsmax", levels: []),
             DeviceBattery(name: "Magic Mouse", symbol: "magicmouse.fill", levels: [.init(label: "", symbol: "", percent: 57)])],
             phone: PhoneBattery(percent: 76, charging: true, updated: Date().addingTimeInterval(-600)),
             mac: BatteryInfo(percent: 82, charging: false))
@@ -141,13 +143,27 @@ enum Snapshots {
         for tab in IslandTab.allCases { model.tab = tab; shot("4-\(tab.rawValue)") }
         SnapshotFlags.notesMode = .tasks
         model.tab = .home; model.tab = .notes; shot("4-notes-tasks")
-        SnapshotFlags.notesMode = .vault
-        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .notes; shot("4-notes-vault")
-        SnapshotFlags.notesMode = .clipboard
-        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .notes; shot("4-notes-clipboard")
         SnapshotFlags.notesMode = .notes
+        SnapshotFlags.clipboardMode = .vault
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .clipboard; shot("4-clipboard-vault")
+        SnapshotFlags.clipboardMode = .shots
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .clipboard; shot("4-clipboard-shots-empty")
+        for (i, colors) in [[NSColor.systemBlue, .systemTeal], [.systemIndigo, .systemPink], [.darkGray, .systemGray],
+                            [.systemGreen, .systemYellow]].enumerated() {
+            let image = NSImage(size: NSSize(width: 1440, height: 900), flipped: false) { rect in
+                NSGradient(colors: colors)?.draw(in: rect, angle: -30)
+                NSColor.white.withAlphaComponent(0.85).setFill()
+                NSBezierPath(roundedRect: NSRect(x: 120, y: 120, width: 700, height: 460), xRadius: 30, yRadius: 30).fill()
+                return true
+            }
+            model.clipboard.shots.debugAdd(image, date: Date().addingTimeInterval(Double(-i) * 1800))
+        }
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .clipboard; shot("4-clipboard-shots")
+        SnapshotFlags.clipboardMode = .history
         SnapshotFlags.batteryPage = 1
         model.tab = .music; model.tab = .home; shot("4-home-airpods")
+        SnapshotFlags.batteryPage = 2
+        model.tab = .music; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .home; shot("4-home-max")
         SnapshotFlags.batteryPage = 0
         model.tab = .controls
         model.mixer.debugSet(apps: [], levels: [:], muted: [], access: .granted); shot("4-controls-empty")
@@ -170,5 +186,23 @@ enum Snapshots {
         model.isExpanded = false; model.expandedContentVisible = false; shot("12-focus-compact")
         model.focus.stop()
         model.countdown.debugSet(minutes: 10, remaining: 6 * 60 + 12); shot("13-countdown-compact")
+        model.countdown.reset(); model.countdown.setSeconds(90)
+        SnapshotFlags.timerMode = .timer
+        model.isExpanded = true; model.expandedContentVisible = true
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .timer; shot("13-timer-seconds")
+
+        // Окно настроек — каждый раздел отдельно.
+        let settingsWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 660, height: 470), styleMask: [.titled],
+                                      backing: .buffered, defer: false)
+        for pane in SettingsView.Pane.allCases {
+            SnapshotFlags.settingsPane = pane
+            settingsWindow.contentView = NSHostingView(rootView: SettingsView(model: model).frame(width: 660, height: 470))
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            guard let view = settingsWindow.contentView,
+                  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?
+                .write(to: dir.appendingPathComponent("14-settings-\(SettingsView.Pane.allCases.firstIndex(of: pane)!).png"))
+        }
     }
 }

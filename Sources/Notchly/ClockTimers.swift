@@ -2,14 +2,19 @@ import Foundation
 
 /// Обычный таймер обратного отсчёта.
 final class CountdownTimer: ObservableObject {
-    static let presets: [Int] = [1, 3, 5, 10, 15, 30, 60]
+    /// Быстрый выбор в минутах.
+    static let presets: [Int] = [1, 5, 10, 15, 30, 60]
+    static let maxSeconds = 3 * 3600
 
-    /// Выбранная длительность в минутах (1…180). Меняется через setMinutes / step —
+    /// Выбранная длительность в секундах (1 с … 3 ч). Меняется через setSeconds / step —
     /// присваивание в didSet у @Published уходило бы в бесконечную рекурсию.
-    @Published private(set) var minutes = 10
+    @Published private(set) var seconds = 600
 
-    func setMinutes(_ value: Int) { minutes = min(max(value, 1), 180) }
-    func step(_ delta: Int) { setMinutes(minutes + delta) }
+    var minutes: Int { seconds / 60 }
+    func setSeconds(_ value: Int) { seconds = min(max(value, 1), Self.maxSeconds) }
+    func setMinutes(_ value: Int) { setSeconds(value * 60) }
+    /// Шаг в секундах (кнопки ± и стрелки).
+    func step(seconds delta: Int) { setSeconds(seconds + delta) }
     @Published private(set) var endDate: Date?
     @Published private(set) var pausedRemaining: TimeInterval?
     /// Длительность запущенного отсчёта (для кольца и карточки).
@@ -23,7 +28,7 @@ final class CountdownTimer: ObservableObject {
 
     func remaining(at now: Date = Date()) -> TimeInterval {
         if let pausedRemaining { return pausedRemaining }
-        guard let endDate else { return TimeInterval(minutes * 60) }
+        guard let endDate else { return TimeInterval(seconds) }
         return max(0, endDate.timeIntervalSince(now))
     }
 
@@ -32,9 +37,9 @@ final class CountdownTimer: ObservableObject {
         return 1 - remaining(at: now) / runningDuration
     }
 
-    func start(minutes: Int? = nil) {
-        if let minutes { setMinutes(minutes) }
-        runningDuration = TimeInterval(self.minutes * 60)
+    func start(seconds: Int? = nil) {
+        if let seconds { setSeconds(seconds) }
+        runningDuration = TimeInterval(self.seconds)
         pausedRemaining = nil
         endDate = Date().addingTimeInterval(runningDuration)
         tickEverySecond()

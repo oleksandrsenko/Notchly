@@ -27,6 +27,7 @@ final class ClipboardMonitor: ObservableObject {
     var retentionDays: Int {
         get { UserDefaults.standard.object(forKey: "clipboard.retentionDays") as? Int ?? 7 }
         set {
+            objectWillChange.send()
             UserDefaults.standard.set(newValue, forKey: "clipboard.retentionDays")
             prune()
         }
@@ -36,6 +37,11 @@ final class ClipboardMonitor: ObservableObject {
     private var saveWork: DispatchWorkItem?
 
     var onCopy: ((ClipGroup) -> Void)?
+    /// Снимки экрана и скопированные картинки — отдельный раздел буфера.
+    let shots: ScreenshotStore
+    /// Записывать ли текст и картинки (переключатели в настройках).
+    var recordsText = true
+    var recordsImages = true
 
     private let pasteboard = NSPasteboard.general
     private var changeCount: Int
@@ -58,6 +64,7 @@ final class ClipboardMonitor: ObservableObject {
 
     init(persistent: Bool = true) {
         persistence = persistent
+        shots = ScreenshotStore(persistent: persistent)
         changeCount = pasteboard.changeCount
         if persistent, let data = try? Data(contentsOf: Self.fileURL),
            let saved = try? JSONDecoder().decode([ClipGroup].self, from: data) {
@@ -112,6 +119,12 @@ final class ClipboardMonitor: ObservableObject {
         ownChangeCount = pasteboard.changeCount
     }
 
+    /// Положить снимок в буфер обмена — сам себя в историю он не добавит.
+    func copy(_ shot: Screenshot) {
+        shots.write(shot, to: pasteboard)
+        ownChangeCount = pasteboard.changeCount
+    }
+
     func remove(_ item: ClipItem) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             for i in groups.indices { groups[i].items.removeAll { $0.id == item.id } }
@@ -139,7 +152,15 @@ final class ClipboardMonitor: ObservableObject {
 
         let types = Set((pasteboard.types ?? []).map(\.rawValue))
         guard types.isDisjoint(with: Self.skippedTypes) else { return }
-        guard let raw = pasteboard.string(forType: .string) else { return }
+        guard let raw = pasteboard.string(forType: .string) else {
+            // Картинка без текста: снимок экрана в буфер (⌃⇧⌘4) или «Скопировать изображение».
+            let isImage = types.contains(NSPasteboard.PasteboardType.png.rawValue)
+                || types.contains(NSPasteboard.PasteboardType.tiff.rawValue)
+            let isFile = types.contains(NSPasteboard.PasteboardType.fileURL.rawValue)
+            if recordsImages, isImage, !isFile { shots.add(pasteboard: pasteboard) }
+            return
+        }
+        guard recordsText else { return }
         let text = String(raw.prefix(10_000))
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 

@@ -1,10 +1,11 @@
 import AppKit
-import ServiceManagement
+import Combine
 
 @main
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: NotchWindowController?
     private var statusItem: NSStatusItem?
+    private var menuBarObserver: AnyCancellable?
 
     static func main() {
         if let i = CommandLine.arguments.firstIndex(of: "--snapshots"), i + 1 < CommandLine.arguments.count {
@@ -100,74 +101,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusItem()
     }
 
-    @objc private func showAbout() {
-        let credits = NSAttributedString(
-            string: "Остров в вырезе экрана: музыка, задачи, таймеры, напоминания и уведомления.\nВсе данные хранятся только на этом Mac.",
-            attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+    /// Повторный запуск (например, из Finder), когда значок в строке меню спрятан, — открывает настройки.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return false
     }
 
+    @objc private func openSettings() {
+        guard let model = controller?.model else { return }
+        SettingsWindowController.shared.show(model: model)
+    }
+
+    /// Все настройки живут в отдельном окне; в строке меню — только вход в него и выход.
     private func setupStatusItem() {
+        guard let model = controller?.model else { return }
+        updateStatusItem(visible: model.settings.menuBarIcon)
+        menuBarObserver = model.settings.$menuBarIcon
+            .removeDuplicates()
+            .sink { [weak self] visible in DispatchQueue.main.async { self?.updateStatusItem(visible: visible) } }
+    }
+
+    private func updateStatusItem(visible: Bool) {
+        guard visible else {
+            if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+            statusItem = nil
+            return
+        }
+        guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Notchly")
         let menu = NSMenu()
-
-        let login = NSMenuItem(title: "Запускать при входе", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
-        login.target = self
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(login)
-
-        let retention = NSMenuItem(title: "Хранить буфер обмена", action: nil, keyEquivalent: "")
-        let retentionMenu = NSMenu()
-        for days in ClipboardMonitor.retentionOptions {
-            let title = days == 0 ? "Бесконечно" : days == 1 ? "1 день" : "\(days) дней"
-            let item = NSMenuItem(title: title, action: #selector(setClipboardRetention(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = days
-            retentionMenu.addItem(item)
-        }
-        retentionMenu.delegate = self
-        retention.submenu = retentionMenu
-        menu.addItem(retention)
-
-        let clear = NSMenuItem(title: "Очистить файлы", action: #selector(clearShelf), keyEquivalent: "")
-        clear.target = self
-        menu.addItem(clear)
-
+        let settings = NSMenuItem(title: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         menu.addItem(.separator())
-        let about = NSMenuItem(title: "О Notchly", action: #selector(showAbout), keyEquivalent: "")
-        about.target = self
-        menu.addItem(about)
-        menu.addItem(NSMenuItem(title: "Выйти", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Выйти из Notchly", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
         statusItem = item
-    }
-
-    @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            NSLog("Launch at login: \(error)")
-        }
-        sender.state = SMAppService.mainApp.status == .enabled ? .on : .off
-    }
-
-    @objc private func setClipboardRetention(_ sender: NSMenuItem) {
-        controller?.model.clipboard.retentionDays = sender.tag
-    }
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        let current = controller?.model.clipboard.retentionDays ?? 7
-        for item in menu.items { item.state = item.tag == current ? .on : .off }
-    }
-
-    @objc private func clearShelf() {
-        controller?.model.shelf.removeAll()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

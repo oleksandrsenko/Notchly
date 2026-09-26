@@ -35,10 +35,10 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     @Published private(set) var mac: BatteryInfo?
     @Published private(set) var devices: [DeviceBattery] = []
 
-    /// Наушники для карточки на главной: сначала подключённые, иначе последний известный заряд.
-    var headphones: DeviceBattery? {
-        let all = devices.filter(\.isHeadphones)
-        return all.first(where: \.isConnected) ?? all.first
+    /// Подключённые наушники — по карточке на каждые (AirPods Pro и AirPods Max отдельно).
+    /// Неподключённые не показываем: их заряд уже неправда.
+    var headphones: [DeviceBattery] {
+        devices.filter { $0.isHeadphones && $0.isConnected }
     }
 
     /// Мышь, клавиатура, трекпад и прочие подключённые Bluetooth-устройства с зарядом.
@@ -61,6 +61,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     private var pendingCompletions: [() -> Void] = []
     private var wasOnAC: Bool?
     private var connectNotification: IOBluetoothUserNotification?
+    /// Когда какие наушники последний раз сообщали о подключении — повторы подряд пропускаем.
+    private var lastConnect: [String: Date] = [:]
     private let startedAt = Date()
 
     override init() {
@@ -137,6 +139,9 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
         let lower = name.lowercased()
         let looksLikeHeadphones = ["airpods", "beats", "headphone", "наушник", "buds"].contains { lower.contains($0) }
         guard device.deviceClassMajor == kBluetoothDeviceClassMajorAudio || looksLikeHeadphones else { return }
+        // Наушники подключают несколько профилей подряд, и система сообщает о каждом.
+        if let last = lastConnect[name], Date().timeIntervalSince(last) < 15 { return }
+        lastConnect[name] = Date()
         // Заряд появляется в системе не сразу после подключения: IOBluetooth обычно знает его раньше,
         // чем system_profiler. Если сразу не нашли — перечитываем ещё раз и обновляем карточку на месте.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -191,7 +196,9 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
                         if levels.isEmpty, connected, let percent = hidPercent(for: info, in: hid) {
                             levels = [DeviceBattery.Level(label: "", symbol: "", percent: percent)]
                         }
-                        guard !levels.isEmpty else { continue }
+                        // Подключённые наушники показываем и без заряда (AirPods Max сообщают его не всегда).
+                        let headphones = DeviceBattery(name: name, symbol: symbol(for: name, info: info), levels: []).isHeadphones
+                        guard !levels.isEmpty || (connected && headphones) else { continue }
                         result.append(DeviceBattery(name: name, symbol: symbol(for: name, info: info),
                                                     levels: levels, isConnected: connected))
                     }
@@ -225,7 +232,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
                 levels.append(.init(label: "Кейс", symbol: isPro ? "airpodspro.chargingcase.wireless.fill" : "airpods.chargingcase.fill",
                                     percent: casing))
             }
-            if levels.isEmpty, let single = percent("batteryPercentSingle") ?? percent("batteryPercentCombined") {
+            if levels.isEmpty, let single = percent("batteryPercentSingle") ?? percent("batteryPercentCombined")
+                ?? percent("headsetBattery") {
                 levels.append(.init(label: "", symbol: "", percent: single))
             }
             if !levels.isEmpty, !name.isEmpty { result[name] = levels }

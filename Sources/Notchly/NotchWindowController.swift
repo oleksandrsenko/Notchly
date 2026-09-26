@@ -131,9 +131,19 @@ final class NotchWindowController {
             guard let self else { return }
             self.dragChangeCount = NSPasteboard(name: .drag).changeCount
             if self.model.isExpanded && !self.islandRect().contains(NSEvent.mouseLocation) {
-                self.model.collapse()
-                self.syncMouseEvents(inHotZone: false)
+                self.collapseNow()
             }
+        } as Any)
+        // Клик по прозрачной части нашей же панели (вокруг острова) — это событие приложения, а не
+        // глобальное, поэтому его ловит отдельный локальный монитор. Без него остров закрывался
+        // только через пару секунд по таймеру ухода курсора.
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self else { return event }
+            if event.window === self.panel, self.model.isExpanded,
+               !self.islandRect().contains(NSEvent.mouseLocation) {
+                self.collapseNow()
+            }
+            return event
         } as Any)
         monitors.append(NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             self?.handleMouse(dragging: false)
@@ -233,8 +243,17 @@ final class NotchWindowController {
         CGAssociateMouseAndMouseCursorPosition(1)
     }
 
+    /// Клик мимо острова: закрываем сразу, без ожидания таймера.
+    private func collapseNow() {
+        collapseWork?.cancel()
+        collapseWork = nil
+        guard !model.settingsOpen else { return }
+        model.collapse()
+        syncMouseEvents(inHotZone: false)
+    }
+
     private func scheduleCollapseIfNeeded() {
-        guard model.isExpanded, collapseWork == nil else { return }
+        guard model.isExpanded, collapseWork == nil, !model.settingsOpen else { return }
         // Не сворачиваем, пока пользователь тянет слайдер или файл.
         guard NSEvent.pressedMouseButtons == 0 else { return }
         let work = DispatchWorkItem { [weak self] in
@@ -247,8 +266,8 @@ final class NotchWindowController {
             }
         }
         collapseWork = work
-        // Остров не закрывается сразу, если курсор случайно соскользнул: ждём 2,5 с.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+        // Остров не закрывается сразу, если курсор случайно соскользнул: ждём, сколько задано в настройках.
+        DispatchQueue.main.asyncAfter(deadline: .now() + model.settings.closeDelay, execute: work)
     }
 
     private func syncMouseEvents(inHotZone: Bool) {

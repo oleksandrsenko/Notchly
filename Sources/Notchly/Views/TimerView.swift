@@ -171,15 +171,15 @@ struct TimerView: View {
                         time: countdown.remaining(at: ctx.date).clock,
                         caption: countdown.isActive ? (countdown.isPaused ? "Пауза" : "Осталось") : "Таймер",
                         dimmed: countdown.isPaused)
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
                         ForEach(CountdownTimer.presets, id: \.self) { value in
-                            let selected = countdown.minutes == value
+                            let selected = countdown.seconds == value * 60
                             Button { countdown.setMinutes(value) } label: {
                                 Text("\(value)")
                                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                                     .foregroundStyle(selected ? .black : .white.opacity(0.75))
-                                    .frame(width: 34, height: 26)
+                                    .frame(width: 34, height: 24)
                                     .background(Capsule().fill(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.1))))
                                     .contentShape(Capsule())
                             }
@@ -189,20 +189,29 @@ struct TimerView: View {
                         Text("мин").font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.45))
                     }
                     .opacity(countdown.isActive ? 0.4 : 1)
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         if countdown.isActive {
                             RoundButton(symbol: countdown.isPaused ? "play.fill" : "pause.fill",
                                         help: countdown.isPaused ? "Продолжить" : "Пауза") { countdown.togglePause() }
                             RoundButton(symbol: "arrow.counterclockwise", help: "Сбросить") { countdown.reset() }
                         } else {
-                            RoundButton(symbol: "minus", help: "Минус минута") { countdown.step(-1) }
-                            Text("\(countdown.minutes) мин")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .monospacedDigit()
-                                .frame(minWidth: 56)
-                            RoundButton(symbol: "plus", help: "Плюс минута") { countdown.step(1) }
+                            // Минуты и секунды: стрелками или вписать число самому.
+                            HStack(spacing: 2) {
+                                NumberWheel(value: countdown.seconds / 60, range: 0...180, fontSize: 26,
+                                            caption: "мин") { m in
+                                    countdown.setSeconds(m * 60 + countdown.seconds % 60)
+                                }
+                                Text(":")
+                                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.5))
+                                    .padding(.bottom, 12)
+                                NumberWheel(value: countdown.seconds % 60, range: 0...59, step: 5, wraps: true,
+                                            fontSize: 26, caption: "сек") { sec in
+                                    countdown.setSeconds(countdown.seconds / 60 * 60 + sec)
+                                }
+                            }
                             PrimaryButton(title: "Старт", symbol: "play.fill") { countdown.start() }
-                                .padding(.leading, 4)
+                                .padding(.leading, 6)
                         }
                     }
                 }
@@ -220,9 +229,9 @@ struct TimerView: View {
         HStack(alignment: .top, spacing: 22) {
             VStack(spacing: 8) {
                 HStack(spacing: 4) {
-                    wheel(value: alarmHour, range: 24) { alarmHour = $0 }
+                    NumberWheel(value: alarmHour, range: 0...23, wraps: true) { alarmHour = $0 }
                     Text(":").font(.system(size: 32, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.5))
-                    wheel(value: alarmMinute, range: 60, step: 5) { alarmMinute = $0 }
+                    NumberWheel(value: alarmMinute, range: 0...59, step: 5, wraps: true) { alarmMinute = $0 }
                 }
                 PrimaryButton(title: "Добавить", symbol: "alarm.fill") {
                     alarms.add(String(format: "%02d:%02d", alarmHour, alarmMinute))
@@ -247,29 +256,93 @@ struct TimerView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
-
-    /// Число со стрелками вверх/вниз (часы или минуты).
-    private func wheel(value: Int, range: Int, step: Int = 1, set: @escaping (Int) -> Void) -> some View {
-        VStack(spacing: 0) {
-            Button { set((value + step) % range) } label: {
-                Image(systemName: "chevron.up").font(.system(size: 10, weight: .bold))
-                    .frame(width: 44, height: 16).contentShape(Rectangle())
-            }
-            .buttonStyle(PressableStyle())
-            Text(String(format: "%02d", value))
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-            Button { set((value - step + range) % range) } label: {
-                Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
-                    .frame(width: 44, height: 16).contentShape(Rectangle())
-            }
-            .buttonStyle(PressableStyle())
-        }
-        .foregroundStyle(.white.opacity(0.85))
-    }
 }
 
 // MARK: - Детали
+
+/// Число со стрелками вверх/вниз. По клику на само число его можно вписать с клавиатуры.
+private struct NumberWheel: View {
+    var value: Int
+    var range: ClosedRange<Int>
+    var step = 1
+    /// Переход через край (59 → 0), как у часов.
+    var wraps = false
+    var fontSize: CGFloat = 34
+    var caption: String? = nil
+    var set: (Int) -> Void
+
+    @ViewState private var editing = false
+    @ViewState private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            arrow("chevron.up") { shift(step) }
+            ZStack {
+                if editing {
+                    TextField("", text: $draft)
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.center)
+                        .focused($focused)
+                        .onSubmit(commit)
+                        .onExitCommand { editing = false }
+                        .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
+                        .onChange(of: draft) { _, text in
+                            let digits = String(text.filter(\.isNumber).prefix(3))
+                            if digits != text { draft = digits }
+                        }
+                } else {
+                    Text(String(format: "%02d", value))
+                        .onTapGesture {
+                            draft = ""
+                            editing = true
+                            DispatchQueue.main.async { focused = true }
+                        }
+                        .help("Нажмите, чтобы ввести число")
+                }
+            }
+            .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .frame(width: fontSize * 1.45, height: fontSize * 1.15)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.white.opacity(editing ? 0.12 : 0)))
+            arrow("chevron.down") { shift(-step) }
+            if let caption {
+                Text(caption)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+        }
+        .foregroundStyle(.white.opacity(0.85))
+    }
+
+    private func arrow(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 10, weight: .bold))
+                .frame(width: 44, height: 14).contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    private func shift(_ delta: Int) {
+        editing = false
+        var next = value + delta
+        if wraps {
+            let span = range.upperBound - range.lowerBound + 1
+            next = (next - range.lowerBound + span) % span + range.lowerBound
+        } else {
+            next = min(max(next, range.lowerBound), range.upperBound)
+        }
+        set(next)
+    }
+
+    private func commit() {
+        guard editing else { return }
+        editing = false
+        guard let number = Int(draft) else { return }
+        set(min(max(number, range.lowerBound), range.upperBound))
+    }
+}
 
 /// Большое кольцо с отсчётом в центре.
 private struct BigRing: View {
