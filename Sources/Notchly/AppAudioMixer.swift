@@ -28,7 +28,7 @@ final class AppAudioMixer: ObservableObject {
     private var taps: [String: ProcessTap] = [:]
     private var lastSeen: [String: Date] = [:]
     private var requestingAccess = false
-    /// Слушатели Core Audio вместо опроса: список аудиопроцессов и «выводит звук» у каждого из них.
+    /// Слушатели Core Audio вместо опроса: список аудиопроцессов и запуск/остановка звука у каждого из них.
     private var listening = false
     private var processListeners: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
     private var refreshWork: DispatchWorkItem?
@@ -78,24 +78,33 @@ final class AppAudioMixer: ObservableObject {
         var listAddr = Self.address(kAudioHardwarePropertyProcessObjectList)
         AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &listAddr, .main,
                                                processListChanged)
-        var addr = Self.address(kAudioProcessPropertyIsRunningOutput)
-        for (obj, block) in processListeners { AudioObjectRemovePropertyListenerBlock(obj, &addr, .main, block) }
+        for (obj, block) in processListeners {
+            for selector in Self.processSelectors {
+                var addr = Self.address(selector)
+                AudioObjectRemovePropertyListenerBlock(obj, &addr, .main, block)
+            }
+        }
         processListeners.removeAll()
     }
 
     /// Подписываемся на новые процессы. Исчезнувшие просто забываем: их объектов уже нет,
     /// и отписка от них только сыпала бы ошибками в лог.
     private func syncProcessListeners(with objects: [AudioObjectID]) {
-        var addr = Self.address(kAudioProcessPropertyIsRunningOutput)
         let current = Set(objects)
         for obj in processListeners.keys where !current.contains(obj) { processListeners[obj] = nil }
         for obj in objects where processListeners[obj] == nil {
             let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.scheduleRefresh(after: 0.05) }
-            if AudioObjectAddPropertyListenerBlock(obj, &addr, .main, block) == noErr {
-                processListeners[obj] = block
+            for selector in Self.processSelectors {
+                var addr = Self.address(selector)
+                AudioObjectAddPropertyListenerBlock(obj, &addr, .main, block)
             }
+            processListeners[obj] = block
         }
     }
+
+    /// На macOS 27 уведомление приходит только для IsRunning (процесс запустил или остановил звук);
+    /// IsRunningOutput подписку принимает, но молчит. Слушаем оба — само значение читаем в refresh().
+    private static let processSelectors = [kAudioProcessPropertyIsRunning, kAudioProcessPropertyIsRunningOutput]
 
     /// События приходят пачками (браузер заводит несколько хелперов разом) — обновляемся один раз.
     private func scheduleRefresh(after delay: TimeInterval) {
