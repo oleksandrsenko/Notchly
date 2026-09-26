@@ -555,21 +555,6 @@ struct BatteryGlyph: View {
                 RoundedRectangle(cornerRadius: height * 0.16, style: .continuous)
                     .fill(color)
                     .frame(width: max(2, inner * fill))
-                    .overlay {
-                        if charging {
-                            TimelineView(.animation(minimumInterval: 1 / 30)) { ctx in
-                                let t = ctx.date.timeIntervalSinceReferenceDate
-                                let phase = CGFloat((t / 2.2).truncatingRemainder(dividingBy: 1))
-                                LinearGradient(colors: [.clear, .white.opacity(0.55), .clear],
-                                               startPoint: .leading, endPoint: .trailing)
-                                    .frame(width: inner * 0.45)
-                                    .offset(x: -inner * 0.45 + phase * inner * 1.45)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: height * 0.16, style: .continuous))
-                            .transition(.opacity)
-                        }
-                    }
                     .padding(2)
             }
             .frame(width: width, height: height)
