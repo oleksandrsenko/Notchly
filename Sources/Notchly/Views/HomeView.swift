@@ -180,7 +180,6 @@ private struct WeatherCard: View {
                     Image(systemName: w.symbol)
                         .symbolRenderingMode(.multicolor)
                         .font(.system(size: 22))
-                        .symbolEffect(.pulse, options: .repeating.speed(0.3))
                 }
                 Text(w.summary)
                     .font(.system(size: 11, weight: .semibold))
