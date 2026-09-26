@@ -28,7 +28,10 @@ final class AppAudioMixer: ObservableObject {
     private var taps: [String: ProcessTap] = [:]
     private var lastSeen: [String: Date] = [:]
     private var requestingAccess = false
-    private var timer: Timer?
+    /// Слушатели Core Audio вместо опроса: список аудиопроцессов и «выводит звук» у каждого из них.
+    private var listening = false
+    private var processListeners: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
+    private var refreshWork: DispatchWorkItem?
     private let defaults = UserDefaults.standard
     private let ownPID = ProcessInfo.processInfo.processIdentifier
 
@@ -53,14 +56,54 @@ final class AppAudioMixer: ObservableObject {
         AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, .main) { [weak self] _, _ in
             self?.rebuildAllTaps()
         }
-        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
-        t.tolerance = 0.3
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+        listening = true
+        var listAddr = Self.address(kAudioHardwarePropertyProcessObjectList)
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &listAddr, .main,
+                                            processListChanged)
         refresh()
     }
 
-    deinit { taps.values.forEach { $0.stop() } }
+    deinit {
+        taps.values.forEach { $0.stop() }
+        stopListening()
+    }
+
+    private lazy var processListChanged: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+        self?.scheduleRefresh(after: 0.1)
+    }
+
+    private func stopListening() {
+        guard listening else { return }
+        listening = false
+        var listAddr = Self.address(kAudioHardwarePropertyProcessObjectList)
+        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &listAddr, .main,
+                                               processListChanged)
+        var addr = Self.address(kAudioProcessPropertyIsRunningOutput)
+        for (obj, block) in processListeners { AudioObjectRemovePropertyListenerBlock(obj, &addr, .main, block) }
+        processListeners.removeAll()
+    }
+
+    /// Подписываемся на новые процессы. Исчезнувшие просто забываем: их объектов уже нет,
+    /// и отписка от них только сыпала бы ошибками в лог.
+    private func syncProcessListeners(with objects: [AudioObjectID]) {
+        var addr = Self.address(kAudioProcessPropertyIsRunningOutput)
+        let current = Set(objects)
+        for obj in processListeners.keys where !current.contains(obj) { processListeners[obj] = nil }
+        for obj in objects where processListeners[obj] == nil {
+            let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.scheduleRefresh(after: 0.05) }
+            if AudioObjectAddPropertyListenerBlock(obj, &addr, .main, block) == noErr {
+                processListeners[obj] = block
+            }
+        }
+    }
+
+    /// События приходят пачками (браузер заводит несколько хелперов разом) — обновляемся один раз.
+    private func scheduleRefresh(after delay: TimeInterval) {
+        refreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.refresh() }
+        refreshWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
 
     func level(for app: AudioApp) -> Float { levels[app.bundleID] ?? 1 }
     func isMuted(_ app: AudioApp) -> Bool { muted.contains(app.bundleID) }
@@ -86,8 +129,8 @@ final class AppAudioMixer: ObservableObject {
 
     /// Для снапшотов.
     func debugSet(apps: [AudioApp], levels: [String: Float], muted: Set<String>, access: Access) {
-        timer?.invalidate()
-        timer = nil
+        refreshWork?.cancel()
+        stopListening()
         self.apps = apps
         self.levels = levels
         self.muted = muted
@@ -96,12 +139,12 @@ final class AppAudioMixer: ObservableObject {
 
     // MARK: - Список приложений
 
-    /// Кому принадлежит аудиопроцесс (или никому). Поиск через LaunchServices дорогой,
-    /// а опрос идёт каждую секунду — поэтому запоминаем ответ, пока процесс жив.
+    /// Кому принадлежит аудиопроцесс (или никому). Поиск через LaunchServices дорогой —
+    /// запоминаем ответ, пока процесс есть в списке Core Audio (ниже кэш чистится по этому списку).
     private var owners: [pid_t: NSRunningApplication?] = [:]
 
     private func owner(pid: pid_t, obj: AudioObjectID) -> NSRunningApplication? {
-        if let cached = owners[pid], cached?.isTerminated != true { return cached }
+        if let cached = owners[pid] { return cached }
         let app = Self.owningApp(pid: pid, obj: obj)
         owners[pid] = .some(app)
         return app
@@ -110,7 +153,9 @@ final class AppAudioMixer: ObservableObject {
     private func refresh() {
         var byApp: [String: (app: NSRunningApplication, procs: [AudioObjectID], playing: Bool)] = [:]
         var alive = Set<pid_t>()
-        for obj in Self.processObjects() {
+        let objects = Self.processObjects()
+        if listening { syncProcessListeners(with: objects) }
+        for obj in objects {
             let pid: pid_t = Self.read(obj, kAudioProcessPropertyPID, pid_t(0))
             alive.insert(pid)
             guard pid > 0, pid != ownPID, let app = owner(pid: pid, obj: obj),
@@ -125,12 +170,17 @@ final class AppAudioMixer: ObservableObject {
         owners = owners.filter { alive.contains($0.key) }
 
         let now = Date()
+        var nextExpiry: TimeInterval?
         var result: [AudioApp] = []
         for (bundleID, entry) in byApp {
             if entry.playing { lastSeen[bundleID] = now }
             // Держим приложение в списке ещё немного после паузы, чтобы строки не мигали,
             // и всегда — пока к нему применена своя громкость.
-            let recent = lastSeen[bundleID].map { now.timeIntervalSince($0) < 12 } ?? false
+            let recent = lastSeen[bundleID].map { now.timeIntervalSince($0) < Self.keepAfterPause } ?? false
+            if recent && !entry.playing, let seen = lastSeen[bundleID] {
+                let expires = seen.addingTimeInterval(Self.keepAfterPause).timeIntervalSince(now)
+                nextExpiry = min(nextExpiry ?? expires, expires)
+            }
             guard entry.playing || recent || taps[bundleID] != nil else { continue }
             result.append(AudioApp(bundleID: bundleID,
                                    name: entry.app.localizedName ?? bundleID,
@@ -146,6 +196,15 @@ final class AppAudioMixer: ObservableObject {
         }
         if result != apps { apps = result }
         result.forEach(apply)
+        // Приложение на паузе пропадёт из списка, когда истечёт его время, — событий тогда не будет.
+        if listening, let nextExpiry { scheduleRefresh(after: nextExpiry + 0.1) }
+    }
+
+    private static let keepAfterPause: TimeInterval = 12
+
+    private static func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal,
+                                   mElement: kAudioObjectPropertyElementMain)
     }
 
     // MARK: - Taps
