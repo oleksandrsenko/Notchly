@@ -33,9 +33,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// Под раскрытым островом, по центру того же экрана.
     private func place(_ window: NSWindow, model: IslandModel) {
         let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
-        let islandBottom = screen.frame.maxY - model.notchSize.height - IslandMetrics.expandedContentHeight
+        // Ниже всей прозрачной панели острова, а не только его видимой формы.
+        let panelBottom = screen.frame.maxY - IslandMetrics.windowSize.height
         let size = window.frame.size
-        var origin = NSPoint(x: screen.frame.midX - size.width / 2, y: islandBottom - 28 - size.height)
+        var origin = NSPoint(x: screen.frame.midX - size.width / 2, y: panelBottom - 12 - size.height)
         origin.y = max(origin.y, screen.visibleFrame.minY + 8)
         window.setFrameOrigin(origin)
     }
@@ -49,6 +50,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
 /// У приложения без меню ⌘W сам не работает — закрываем окно по физической клавише.
 private final class SettingsWindow: NSWindow {
+    /// Esc закрывает окно, как лист настроек.
+    override func cancelOperation(_ sender: Any?) { performClose(nil) }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         if event.type == .keyDown, flags == [.command] {

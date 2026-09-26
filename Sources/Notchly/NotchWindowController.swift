@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Прозрачная панель поверх строки меню. Не активирует приложение,
@@ -57,6 +58,8 @@ final class NotchWindowController {
     private let menuBarGuard = MenuBarGuard()
     private var hoverTimer: Timer?
     private var lastPolledLocation = NSPoint.zero
+    private var eventObserver: AnyCancellable?
+    private var overlayProbe: Timer?
 
     init() {
         let root = IslandRootView(model: model, media: model.media)
@@ -78,6 +81,12 @@ final class NotchWindowController {
             return (rect.minX...rect.maxX, primaryTop - self.screen.frame.maxY)
         }
         menuBarGuard.start()
+        eventObserver = model.$event
+            .map { $0?.deviceName != nil }
+            .removeDuplicates()
+            .sink { [weak self] isDevice in
+                DispatchQueue.main.async { if isDevice { self?.probeOverlays() } }
+            }
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
@@ -114,6 +123,33 @@ final class NotchWindowController {
         return NSRect(x: screen.frame.midX - size.width / 2,
                       y: screen.frame.maxY - size.height,
                       width: size.width, height: size.height)
+    }
+
+    // MARK: - Диагностика карточки наушников
+
+    /// Пока показана карточка наушников, записываем в журнал чужие окна над вырезом:
+    /// так видно, не закрывает ли остров системная плашка macOS и на каком она уровне.
+    private func probeOverlays() {
+        overlayProbe?.invalidate()
+        var seen = Set<String>()
+        let started = Date()
+        let region = CGRect(x: screen.frame.midX - 400, y: 0, width: 800, height: 160)
+        let me = ProcessInfo.processInfo.processIdentifier
+        DeviceLog.write("Наш уровень окна: \(panel.level.rawValue)")
+        overlayProbe = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in
+            guard Date().timeIntervalSince(started) < 10 else { timer.invalidate(); self?.overlayProbe = nil; return }
+            let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+            for w in windows {
+                guard (w[kCGWindowOwnerPID as String] as? Int32) != me,
+                      let b = w[kCGWindowBounds as String] as? [String: CGFloat],
+                      let layer = w[kCGWindowLayer as String] as? Int, layer > 0 else { continue }
+                let rect = CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0)
+                guard rect.intersects(region), rect.height < 400 else { continue }
+                let owner = w[kCGWindowOwnerName as String] as? String ?? "?"
+                let key = "\(owner) слой \(layer) \(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))"
+                if seen.insert(key).inserted { DeviceLog.write("Окно над вырезом: \(key)") }
+            }
+        }
     }
 
     // MARK: - Мышь
@@ -186,13 +222,17 @@ final class NotchWindowController {
         }
 
         if model.isExpanded {
-            if islandRect().insetBy(dx: -12, dy: -12).contains(location) {
+            let inside = islandRect().insetBy(dx: -12, dy: -12).contains(location)
+            if inside {
                 collapseWork?.cancel()
                 collapseWork = nil
             } else {
                 scheduleCollapseIfNeeded()
             }
-            syncMouseEvents(inHotZone: true)
+            // Панель больше самого острова. Вне острова она пропускает клики насквозь: иначе прозрачная
+            // часть перекрывала окна под ней (например, заголовок окна настроек), а клик мимо острова
+            // не доходил до глобального монитора и не закрывал его сразу.
+            syncMouseEvents(inHotZone: inside)
             return
         }
 
@@ -271,7 +311,7 @@ final class NotchWindowController {
     }
 
     private func syncMouseEvents(inHotZone: Bool) {
-        let shouldIgnore = !(model.isExpanded || inHotZone)
+        let shouldIgnore = !inHotZone
         if panel.ignoresMouseEvents != shouldIgnore {
             panel.ignoresMouseEvents = shouldIgnore
         }

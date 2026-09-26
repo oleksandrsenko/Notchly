@@ -122,11 +122,46 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
     }
 
+    private var lastAccessories: [String: DeviceBattery.Level] = [:]
+
     private func powerChanged() {
-        guard debugMac == nil, let info = BatteryInfo.read() else { return }
-        mac = info
-        if info.onAC && wasOnAC == false { onChargerConnected?(info) }
-        wasOnAC = info.onAC
+        guard debugMac == nil else { return }
+        if let info = BatteryInfo.read() {
+            mac = info
+            if info.onAC && wasOnAC == false { onChargerConnected?(info) }
+            wasOnAC = info.onAC
+        }
+        // Наушники тоже публикуются как источники питания: когда их заряд появился или изменился,
+        // сразу перечитываем устройства и обновляем открытую карточку.
+        let accessories = Self.accessoryLevels()
+        guard accessories != lastAccessories else { return }
+        lastAccessories = accessories
+        DeviceLog.write("Источники питания: " + accessories.map { "\($0.key) \($0.value.percent)%" }.sorted().joined(separator: ", "))
+        refresh { [weak self] in
+            guard let self else { return }
+            for device in self.headphones where !device.levels.isEmpty { self.onAudioDeviceUpdated?(device) }
+        }
+    }
+
+    /// Заряд аксессуаров из IOKit Power Sources — там же его берёт Пункт управления macOS.
+    /// Так приходит заряд AirPods Max, которого нет ни в system_profiler, ни в IOBluetooth.
+    static func accessoryLevels() -> [String: DeviceBattery.Level] {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let list = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else { return [:] }
+        var result: [String: DeviceBattery.Level] = [:]
+        for source in list {
+            guard let desc = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
+                  desc[kIOPSTypeKey] as? String != kIOPSInternalBatteryType,
+                  let name = desc[kIOPSNameKey] as? String, !name.isEmpty,
+                  let current = desc[kIOPSCurrentCapacityKey] as? Int,
+                  let max = desc[kIOPSMaxCapacityKey] as? Int, max > 0 else { continue }
+            let percent = min(100, current * 100 / max)
+            let charging = desc[kIOPSIsChargingKey] as? Bool ?? false
+            // У AirPods с кейсом несколько источников с одним именем — берём меньший заряд.
+            if let known = result[name], known.percent <= percent { continue }
+            result[name] = DeviceBattery.Level(label: "", symbol: "", percent: percent, charging: charging)
+        }
+        return result
     }
 
     // MARK: - Наушники
@@ -140,14 +175,19 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
         let looksLikeHeadphones = ["airpods", "beats", "headphone", "наушник", "buds"].contains { lower.contains($0) }
         guard device.deviceClassMajor == kBluetoothDeviceClassMajorAudio || looksLikeHeadphones else { return }
         // Наушники подключают несколько профилей подряд, и система сообщает о каждом.
-        if let last = lastConnect[name], Date().timeIntervalSince(last) < 15 { return }
+        if let last = lastConnect[name], Date().timeIntervalSince(last) < 15 {
+            DeviceLog.write("Повтор подключения \(name) — пропущен")
+            return
+        }
         lastConnect[name] = Date()
+        DeviceLog.write("Подключены \(name)")
         // Заряд появляется в системе не сразу после подключения: IOBluetooth обычно знает его раньше,
         // чем system_profiler. Если сразу не нашли — перечитываем ещё раз и обновляем карточку на месте.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.refresh {
                 guard let self else { return }
                 let device = self.connectedDevice(named: name)
+                DeviceLog.write("Заряд \(name): " + DeviceLog.describe(device.levels) + " · " + Self.rawReport(for: name))
                 self.onAudioDeviceConnected?(device)
                 guard device.levels.isEmpty else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -163,8 +203,9 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 
     private func connectedDevice(named name: String) -> DeviceBattery {
         if let known = devices.first(where: { $0.name == name && $0.isConnected }) { return known }
+        let levels = Self.bluetoothLevels()[name] ?? Self.accessoryLevels()[name].map { [$0] } ?? []
         return DeviceBattery(name: name, symbol: Self.symbol(for: name, info: ["device_minorType": "Headphones"]),
-                             levels: Self.bluetoothLevels()[name] ?? [])
+                             levels: levels)
     }
 
     private static func readBluetooth() -> [DeviceBattery] {
@@ -183,6 +224,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
 
         let hid = hidBatteries()
         let direct = bluetoothLevels()
+        let powerSources = accessoryLevels()
         var result: [DeviceBattery] = []
         for controller in controllers {
             for (key, connected) in [("device_connected", true), ("device_not_connected", false)] {
@@ -191,6 +233,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
                         guard let info = value as? [String: Any] else { continue }
                         var levels = parseLevels(info, name: name)
                         if levels.isEmpty, connected, let fromBluetooth = direct[name] { levels = fromBluetooth }
+                        if levels.isEmpty, connected, let fromPower = powerSources[name] { levels = [fromPower] }
                         // Magic Mouse, клавиатура и трекпад: в новых macOS system_profiler не отдаёт их заряд,
                         // но он есть у HID-сервиса устройства.
                         if levels.isEmpty, connected, let percent = hidPercent(for: info, in: hid) {
@@ -239,6 +282,23 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
             if !levels.isEmpty, !name.isEmpty { result[name] = levels }
         }
         return result
+    }
+
+    /// Сырые значения всех известных источников заряда — для журнала подключений.
+    static func rawReport(for name: String) -> String {
+        var parts: [String] = []
+        if Bundle.main.object(forInfoDictionaryKey: "NSBluetoothAlwaysUsageDescription") != nil,
+           let device = (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice])?.first(where: { $0.name == name }) {
+            let keys = ["batteryPercentLeft", "batteryPercentRight", "batteryPercentCase", "batteryPercentSingle",
+                        "batteryPercentCombined", "headsetBattery"]
+            let values = keys.compactMap { key -> String? in
+                guard device.responds(to: NSSelectorFromString(key)) else { return nil }
+                return "\(key)=\((device.value(forKey: key) as? NSNumber)?.intValue ?? -1)"
+            }
+            parts.append("IOBluetooth[" + values.joined(separator: " ") + "]")
+        }
+        parts.append("Power[" + accessoryLevels().map { "\($0.key)=\($0.value.percent)" }.sorted().joined(separator: ", ") + "]")
+        return parts.joined(separator: " ")
     }
 
     private struct HIDBattery { var address: String; var productID: Int; var percent: Int }
@@ -351,5 +411,39 @@ struct PhoneBattery: Equatable {
             if best == nil || date > best!.updated { best = item }
         }
         return best
+    }
+}
+
+/// Журнал подключений наушников: ~/Library/Application Support/Notchly/airpods-log.txt (только владельцу).
+/// Пишется только из собранного приложения — снапшоты и самопроверки его не трогают.
+enum DeviceLog {
+    private static let enabled = Bundle.main.bundleIdentifier == "dev.notchly.app"
+    private static let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Notchly/airpods-log.txt")
+    private static let queue = DispatchQueue(label: "notchly.devicelog")
+
+    static func write(_ line: String) {
+        guard enabled else { return }
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        let text = "\(f.string(from: Date()))  \(line)\n"
+        queue.async {
+            // Не больше ~200 КБ: старое обрезаем.
+            if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 200_000 {
+                try? FileManager.default.removeItem(at: url)
+            }
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(Data(text.utf8))
+                try? handle.close()
+            } else {
+                try? Data(text.utf8).write(to: url)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            }
+        }
+    }
+
+    static func describe(_ levels: [DeviceBattery.Level]) -> String {
+        levels.isEmpty ? "нет" : levels.map { "\($0.label.isEmpty ? "общий" : $0.label) \($0.percent)%" }.joined(separator: ", ")
     }
 }

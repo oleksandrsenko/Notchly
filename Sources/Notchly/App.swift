@@ -73,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             report.append("IOBluetooth: " + DeviceBatteryMonitor.bluetoothLevels()
                 .map { "\($0.key): " + $0.value.map { "\($0.label) \($0.percent)%" }.joined(separator: ", ") }
                 .joined(separator: " | "))
+            report.append("Источники питания: " + DeviceBatteryMonitor.accessoryLevels()
+                .map { "\($0.key) \($0.value.percent)%" }.sorted().joined(separator: ", "))
             let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Notchly/batteries-selftest.txt")
             try? report.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
