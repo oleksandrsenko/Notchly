@@ -282,7 +282,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
         return result
     }
 
-    /// «AirPods Max (Александр)» и «AirPods Max» — одно и то же устройство: разные службы macOS
+    /// «AirPods Max (Имя)» и «AirPods Max» — одно и то же устройство: разные службы macOS
     /// называют его то с именем владельца, то без.
     static func baseName(_ name: String) -> String {
         name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
