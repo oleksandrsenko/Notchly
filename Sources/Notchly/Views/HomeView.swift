@@ -27,7 +27,11 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: batteries.devices)
-        .onAppear { batteries.refresh() }
+        .onAppear {
+            batteries.refresh()
+            batteries.keepsFresh = true
+        }
+        .onDisappear { batteries.keepsFresh = false }
     }
 
 }

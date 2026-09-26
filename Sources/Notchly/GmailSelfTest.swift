@@ -13,6 +13,12 @@ enum GmailSelfTest {
         for m in GmailClient.parseFetch(sample) {
             print("parsed:", m.senderName, "|", m.senderEmail, "|", m.subject, "|", m.date, "|", m.threadHex)
         }
+        var uidSample = Data("* 12 FETCH (X-GM-THRID 1790123456789 X-GM-MSGID 1790123456790 UID 345 BODY[HEADER.FIELDS (FROM SUBJECT DATE)] {\(body.count)}\r\n".utf8)
+        uidSample.append(body)
+        uidSample.append(Data(")\r\na5 OK Success\r\n".utf8))
+        for (uid, m) in GmailClient.parseFetchWithUIDs(uidSample) {
+            print("uid fetch:", uid.map(String.init) ?? "нет UID", "|", m.subject, "|", m.id)
+        }
         let sem = DispatchSemaphore(value: 0)
         Task {
             do {
@@ -20,6 +26,14 @@ enum GmailSelfTest {
                 print("login: unexpected success")
             } catch {
                 print("login:", (error as? IMAPError)?.message ?? error.localizedDescription)
+            }
+            // Постоянное соединение: неверный пароль — ошибка без повторной попытки входа.
+            do {
+                _ = try await GmailMailbox().unread(email: "selftest@gmail.com", password: "wrongpassword")
+                print("mailbox: unexpected success")
+            } catch {
+                let e = error as? IMAPError
+                print("mailbox:", e?.message ?? error.localizedDescription, e?.final == true ? "(без повтора)" : "(повтор)")
             }
             sem.signal()
         }

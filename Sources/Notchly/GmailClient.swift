@@ -21,6 +21,9 @@ final class GmailClient: ObservableObject {
     @Published private(set) var needsPassword = false
 
     private var timer: Timer?
+    /// Соединение и пароль между обновлениями: раньше каждые 30 секунд заново читался пароль из Связки ключей
+    /// (расшифровка в securityd), открывалось TLS-соединение, шёл вход и скачивались 20 заголовков.
+    private let mailbox = GmailMailbox()
     private static let accountKey = "gmail.account"
     /// Новое непрочитанное письмо — остров показывает его карточкой.
     var onNew: ((MailItem) -> Void)?
@@ -43,6 +46,7 @@ final class GmailClient: ObservableObject {
         Task {
             do {
                 let mails = try await Self.fetchUnread(email: email, password: password)
+                await self.mailbox.forget()
                 await MainActor.run {
                     // Старую запись (от прежней подписи) удаляем, чтобы новая принадлежала этой сборке.
                     Keychain.delete(service: "gmail", account: email)
@@ -64,6 +68,8 @@ final class GmailClient: ObservableObject {
     }
 
     func disconnect() {
+        let mailbox = mailbox
+        Task { await mailbox.forget() }
         if let account { Keychain.delete(service: "gmail", account: account) }
         UserDefaults.standard.removeObject(forKey: Self.accountKey)
         account = nil
@@ -75,9 +81,9 @@ final class GmailClient: ObservableObject {
         isLoading = true
         // Пароль читаем не на главном потоке: если macOS спросит доступ к Связке ключей,
         // остров не должен замереть, пока запрос висит на экране.
+        let mailbox = mailbox
         Task.detached {
-            guard let data = Keychain.data(service: "gmail", account: account),
-                  let password = String(data: data, encoding: .utf8) else {
+            guard let password = await mailbox.password(for: account) else {
                 await MainActor.run {
                     self.isLoading = false
                     // Обычно после пересборки без постоянной подписи: Связка ключей не отдаёт пароль новой сборке.
@@ -87,8 +93,10 @@ final class GmailClient: ObservableObject {
                 return
             }
             let result = try? await Self.withTimeout(seconds: 25) {
-                try await Self.fetchUnread(email: account, password: password)
+                try await mailbox.unread(email: account, password: password)
             }
+            // Не уложились — соединение в неизвестном состоянии, в следующий раз откроем новое.
+            if result == nil { await mailbox.reset() }
             await MainActor.run {
                 self.isLoading = false
                 guard let result else {
@@ -177,14 +185,17 @@ final class GmailClient: ObservableObject {
         return parseFetch(fetch.data).sorted { $0.date > $1.date }
     }
 
-    private static func quote(_ s: String) -> String {
+    static func quote(_ s: String) -> String {
         "\"" + s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
     /// Разбирает ответы FETCH: у каждого письма есть X-GM-THRID/X-GM-MSGID и литерал с заголовками.
-    static func parseFetch(_ data: Data) -> [MailItem] {
+    static func parseFetch(_ data: Data) -> [MailItem] { parseFetchWithUIDs(data).map(\.item) }
+
+    /// То же, но с UID письма (если сервер его прислал) — по нему кэшируются уже скачанные заголовки.
+    static func parseFetchWithUIDs(_ data: Data) -> [(uid: UInt64?, item: MailItem)] {
         let bytes = [UInt8](data)
-        var items: [MailItem] = []
+        var items: [(uid: UInt64?, item: MailItem)] = []
         var index = 0
         let literal = try! NSRegularExpression(pattern: #"\{(\d+)\}\r\n$"#)
         var lineStart = 0
@@ -200,7 +211,7 @@ final class GmailClient: ObservableObject {
                 index += length
                 let thread = firstNumber(after: "X-GM-THRID", in: line) ?? 0
                 let msgID = firstNumber(after: "X-GM-MSGID", in: line) ?? UInt64(items.count)
-                items.append(makeItem(headers: headers, thread: thread, msgID: msgID))
+                items.append((firstNumber(after: "UID", in: line), makeItem(headers: headers, thread: thread, msgID: msgID)))
             }
             lineStart = index
         }
@@ -208,7 +219,7 @@ final class GmailClient: ObservableObject {
     }
 
     private static func firstNumber(after key: String, in line: String) -> UInt64? {
-        guard let r = line.range(of: key + " ") else { return nil }
+        guard let r = line.range(of: " " + key + " ") ?? line.range(of: "(" + key + " ") else { return nil }
         return UInt64(line[r.upperBound...].prefix { $0.isNumber })
     }
 
@@ -233,7 +244,124 @@ final class GmailClient: ObservableObject {
     }
 }
 
-struct IMAPError: Error { var message: String }
+struct IMAPError: Error {
+    var message: String
+    /// Повтор на новом соединении не поможет (например, неверный пароль).
+    var final = false
+}
+
+/// Почтовый ящик Gmail между обновлениями: одно открытое соединение (EXAMINE INBOX), пароль в памяти
+/// и кэш уже скачанных заголовков по UID. Обновление — это NOOP и UID SEARCH UNSEEN; заголовки качаются
+/// только у новых писем. Если соединение умерло (сон, смена сети) — одна попытка на новом.
+actor GmailMailbox {
+    private var session: IMAPSession?
+    private var sessionAccount: String?
+    private var cache: [UInt64: MailItem] = [:]
+    /// С какого UID искать непрочитанные. Во «Входящих» их бывают десятки тысяч, и полный SEARCH UNSEEN
+    /// каждые 30 секунд приносил сотни килобайт номеров. Нужны же только 20 самых свежих — ищем среди
+    /// последних писем и расширяем окно, только если там их меньше 20.
+    private var searchFrom: UInt64 = 1
+    /// UIDNEXT при открытии ящика: от него отсчитывается окно поиска.
+    private var uidTop: UInt64 = 1
+    private static let searchWindow: UInt64 = 1000
+    private var cachedPassword: (account: String, password: String)?
+
+    /// Пароль приложения: из памяти, а в первый раз — из Связки ключей.
+    func password(for account: String) -> String? {
+        if let cachedPassword, cachedPassword.account == account { return cachedPassword.password }
+        guard let data = Keychain.data(service: "gmail", account: account),
+              let password = String(data: data, encoding: .utf8) else { return nil }
+        cachedPassword = (account, password)
+        return password
+    }
+
+    func unread(email: String, password: String) async throws -> [MailItem] {
+        do {
+            return try await attempt(email: email, password: password)
+        } catch let error as IMAPError where error.final {
+            forget()
+            throw error
+        } catch {
+            reset()
+            return try await attempt(email: email, password: password)
+        }
+    }
+
+    private static func number(after key: String, in data: Data) -> UInt64? {
+        let text = String(decoding: data, as: UTF8.self)
+        guard let r = text.range(of: key) else { return nil }
+        return UInt64(text[r.upperBound...].prefix { $0.isNumber })
+    }
+
+    /// Закрыть соединение (кэш заголовков живёт вместе с ним).
+    func reset() {
+        session?.close()
+        session = nil
+        sessionAccount = nil
+        cache = [:]
+    }
+
+    /// Забыть и соединение, и пароль (отключили почту или сменили пароль).
+    func forget() {
+        reset()
+        cachedPassword = nil
+    }
+
+    private func attempt(email: String, password: String) async throws -> [MailItem] {
+        let session: IMAPSession
+        if let open = self.session, sessionAccount == email {
+            session = open
+            guard try await session.run("NOOP").ok else { throw IMAPError(message: L("Не удалось обновить почту")) }
+        } else {
+            reset()
+            session = IMAPSession(host: "imap.gmail.com", port: 993)
+            self.session = session
+            try await session.open()
+            guard try await session.run("LOGIN \(GmailClient.quote(email)) \(GmailClient.quote(password))").ok else {
+                throw IMAPError(message: L("Gmail не принял адрес или пароль приложения"), final: true)
+            }
+            let examine = try await session.run("EXAMINE INBOX")
+            guard examine.ok else { throw IMAPError(message: L("Не удалось обновить почту")) }
+            uidTop = Self.number(after: "[UIDNEXT ", in: examine.data) ?? 1
+            searchFrom = uidTop > Self.searchWindow ? uidTop - Self.searchWindow : 1
+            sessionAccount = email
+        }
+        var uids: [UInt64] = []
+        while true {
+            let search = try await session.run("UID SEARCH UNSEEN UID \(searchFrom):*")
+            guard search.ok else { throw IMAPError(message: L("Не удалось обновить почту")) }
+            // На «x:*» сервер может добавить последнее письмо, даже если его UID меньше x, — отсекаем.
+            uids = (String(decoding: search.data, as: UTF8.self)
+                .components(separatedBy: "\r\n")
+                .first { $0.hasPrefix("* SEARCH") }?
+                .split(separator: " ").dropFirst(2).compactMap { UInt64($0) } ?? [])
+                .filter { $0 >= searchFrom }
+            guard uids.count < 20, searchFrom > 1 else { break }
+            // В окне меньше 20 непрочитанных — смотрим глубже (окно в 8 раз больше), пока не дойдём до начала.
+            let window = max(uidTop > searchFrom ? uidTop - searchFrom : 0, Self.searchWindow) * 8
+            searchFrom = uidTop > window ? uidTop - window : 1
+        }
+        let latest = Array(uids.sorted().suffix(20))
+        let missing = latest.filter { cache[$0] == nil }
+        if !missing.isEmpty {
+            let list = missing.map(String.init).joined(separator: ",")
+            let fetch = try await session.run("UID FETCH \(list) (X-GM-THRID X-GM-MSGID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+            let parsed = GmailClient.parseFetchWithUIDs(fetch.data)
+            if parsed.allSatisfy({ $0.uid != nil }) {
+                for (uid, item) in parsed { cache[uid!] = item }
+            } else if parsed.count == missing.count {
+                // UID пришёл не в строке с заголовками. Ответы FETCH идут по возрастанию номеров,
+                // а значит и UID, — сопоставляем по порядку.
+                for (uid, entry) in zip(missing.sorted(), parsed) { cache[uid] = entry.item }
+            } else {
+                throw IMAPError(message: L("Не удалось обновить почту"))
+            }
+        }
+        let keep = Set(latest)
+        cache = cache.filter { keep.contains($0.key) }
+        return latest.compactMap { cache[$0] }.sorted { $0.date > $1.date }
+    }
+}
 
 // MARK: - Соединение IMAP поверх TLS
 
@@ -250,7 +378,7 @@ private final class ResumeOnce: @unchecked Sendable {
     }
 }
 
-private final class IMAPSession {
+final class IMAPSession {
     struct Response { var ok: Bool; var data: Data }
 
     private let connection: NWConnection

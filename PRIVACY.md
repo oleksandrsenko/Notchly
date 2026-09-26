@@ -10,7 +10,7 @@ Notchly lives in the most visible spot on your screen and touches personal thing
 | Clipboard history | `~/Library/Application Support/Notchly/clipboard.json` (`600`), auto-expires | only you |
 | Screenshots & copied images | `~/Library/Application Support/Notchly/Screenshots/` — folder `700`, files `600`; kept 1–7 days (3 by default), at most 40 | only you |
 | Settings | `UserDefaults` (`dev.notchly.app`) — tab layout and on/off switches, no personal data | only you |
-| Gmail app password, Gemini API key | macOS Keychain, *this device only* (never synced to iCloud), readable only while the Mac is unlocked | only Notchly, after macOS asks you |
+| Gmail app password, Gemini API key | macOS Keychain, *this device only* (never synced to iCloud), readable only while the Mac is unlocked. While Notchly runs, the Gmail password is also kept in memory (never on disk) so it isn’t decrypted from the Keychain every 30 seconds | only Notchly, after macOS asks you |
 | API key vault | macOS Keychain, unlocked with Touch ID / Mac password, auto-locks after 2 minutes | only you |
 | App notifications | read-only from macOS Notification Center database | never copied or sent anywhere |
 | Calendar events | EventKit, in memory only | never stored or sent |
@@ -58,7 +58,7 @@ Links from task descriptions, calendar events and reminder cards are opened only
 |---|---|---|
 | Weather | `api.open-meteo.com` (latitude/longitude only, no account) | at most every 10 min |
 | Approximate location | `ipapi.co` | until you allow precise location (tap the weather card) |
-| Gmail | `imap.gmail.com:993` over TLS, with an app password | only if you connect Gmail |
+| Gmail | `imap.gmail.com:993` over TLS, with an app password; one connection stays open and is checked every 30 s (read-only, `EXAMINE`) | only if you connect Gmail |
 | Gemini | `generativelanguage.googleapis.com` | only when you send a prompt |
 | Album art, app icons | `itunes.apple.com` search / lookup (track title + artist, or an app’s bundle ID) | only when the player’s artwork is too small or an icon is missing |
 

@@ -55,6 +55,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     var onAudioDeviceUpdated: ((DeviceBattery) -> Void)?
 
     private var timer: Timer?
+    /// Главная открыта — заряд устройств обновляется раз в 30 секунд.
+    var keepsFresh = false
     private var loading = false
     private var debugMac: BatteryInfo?
     /// Кто ждёт окончания текущего обновления (например, окно подключения наушников).
@@ -68,7 +70,13 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     override init() {
         super.init()
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refresh() }
+        // Список устройств виден только на главной, а она обновляет его при открытии. Остальное (зарядка,
+        // подключение наушников, изменение их заряда) приходит уведомлениями. Поэтому system_profiler
+        // раз в 30 секунд запускаем, только пока главная на экране.
+        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            guard let self, self.keepsFresh else { return }
+            self.refresh()
+        }
         startPowerNotifications()
         // Без описания доступа в Info.plist (запуск вне .app) macOS аварийно завершит процесс.
         if Bundle.main.object(forInfoDictionaryKey: "NSBluetoothAlwaysUsageDescription") != nil {

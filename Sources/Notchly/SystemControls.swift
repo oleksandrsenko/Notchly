@@ -116,6 +116,9 @@ final class BrightnessController: ObservableObject {
 
     private typealias GetFn = @convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32
     private typealias SetFn = @convention(c) (CGDirectDisplayID, Float) -> Int32
+    private typealias RegisterFn = @convention(c) (CGDirectDisplayID, UnsafeMutableRawPointer?, CFNotificationCallback) -> Int32
+    /// Для колбэка уведомлений DisplayServices (C-функция без контекста).
+    private static weak var current: BrightnessController?
 
     private var getFn: GetFn?
     private var setFn: SetFn?
@@ -124,7 +127,8 @@ final class BrightnessController: ObservableObject {
     private var timer: Timer?
 
     init() {
-        if let handle = dlopen("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_NOW) {
+        let handle = dlopen("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_NOW)
+        if let handle {
             if let g = dlsym(handle, "DisplayServicesGetBrightness") { getFn = unsafeBitCast(g, to: GetFn.self) }
             if let s = dlsym(handle, "DisplayServicesSetBrightness") { setFn = unsafeBitCast(s, to: SetFn.self) }
         }
@@ -133,9 +137,26 @@ final class BrightnessController: ObservableObject {
             brightness = value
             isAvailable = setFn != nil
         }
-        // У DisplayServices нет уведомлений, поэтому следим за яркостью опросом.
+        // DisplayServices сам сообщает об изменении яркости (клавиши, Пункт управления, автояркость) —
+        // так не нужно опрашивать её трижды в секунду. Если подписаться не вышло, остаётся опрос.
+        Self.current = self
+        if let handle, let sym = dlsym(handle, "DisplayServicesRegisterForBrightnessChangeNotifications"),
+           unsafeBitCast(sym, to: RegisterFn.self)(display, nil, { _, _, _, _, info in
+               let value = (info as? [String: Any])?["value"] as? Float
+               DispatchQueue.main.async { BrightnessController.current?.externalChange(value) }
+           }) == 0 {
+            return
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] _ in
             self?.poll()
+        }
+    }
+
+    private func externalChange(_ value: Float?) {
+        guard isAvailable, let value = value ?? read(), abs(value - brightness) > 0.004 else { return }
+        brightness = value
+        if Date().timeIntervalSince(lastLocalChange) > 0.6 {
+            onExternalChange?(value)
         }
     }
 
@@ -157,13 +178,7 @@ final class BrightnessController: ObservableObject {
         return getFn(display, &value) == 0 ? value : nil
     }
 
-    private func poll() {
-        guard isAvailable, let value = read(), abs(value - brightness) > 0.004 else { return }
-        brightness = value
-        if Date().timeIntervalSince(lastLocalChange) > 0.6 {
-            onExternalChange?(value)
-        }
-    }
+    private func poll() { externalChange(nil) }
 
     private static func builtInDisplay() -> CGDirectDisplayID? {
         var count: UInt32 = 0
