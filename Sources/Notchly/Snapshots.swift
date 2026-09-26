@@ -20,6 +20,11 @@ enum Snapshots {
     static func render(to dir: URL) {
         SnapshotFlags.isRendering = true
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Голый бинарник из .build не знает своей иконки — в «О Notchly» была бы папка.
+        if Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") == nil,
+           let icon = NSImage(contentsOfFile: "Resources/AppIcon.icns") {
+            NSApplication.shared.applicationIconImage = icon
+        }
         let model = IslandModel(persistent: false)
         model.notchSize = CGSize(width: 185, height: 32)
 

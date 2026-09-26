@@ -60,6 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             center.start()
             RunLoop.main.run(until: Date().addingTimeInterval(0.5))
             print(fired.isEmpty ? "Ничего не сработало" : fired.joined(separator: "\n"))
+            // Переход через полночь: задача на завтра в 00:05 должна напомнить сегодня в 23:55.
+            fired = []
+            tasks.add("Завтра в 00:05", time: "00:05", dayOffset: 1)
+            let lateEvening = Calendar.current.date(bySettingHour: 23, minute: 55, second: 30, of: Date())!
+            center.check(now: lateEvening)
+            print("Через полночь: " + (fired.contains("Завтра в 00:05 — за 10 мин") ? "OK" : "ОШИБКА \(fired)"))
             exit(0)
         }
         if CommandLine.arguments.contains("--imap-selftest") {

@@ -178,11 +178,14 @@ enum Bench {
         scenario.setup(model, hosting)
         await sleep(2.5)
 
-        var tick = 0
-        let timer = scenario.tick.map { body in
-            Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                MainActor.assumeIsolated { body(model, hosting, tick) }
-                tick += 1
+        let ticker = scenario.tick.map { body in
+            Task { @MainActor in
+                var tick = 0
+                while !Task.isCancelled {
+                    body(model, hosting, tick)
+                    tick += 1
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
             }
         }
         let start = cpuTimes()
@@ -190,7 +193,7 @@ enum Bench {
         await sleep(seconds)
         let end = cpuTimes()
         let wall = Date().timeIntervalSince(startDate)
-        timer?.invalidate()
+        ticker?.cancel()
         panel.orderOut(nil)
         model.media.debugSet(title: "", artist: "", album: "", duration: 0, elapsed: 0, playing: false, artwork: nil, bundleID: nil)
         model.focus.stop()

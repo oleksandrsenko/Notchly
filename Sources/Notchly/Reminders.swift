@@ -200,17 +200,22 @@ final class ReminderCenter {
         check()
     }
 
-    /// Задачи со временем на сегодня (невыполненные).
+    /// Задачи со временем на сегодня и на завтра (невыполненные).
     private func taskCandidates(now: Date) -> [Reminder] {
         let cal = Calendar.current
-        // Только задачи на сегодня (включая перенесённые со вчера), не на будущие дни.
-        return tasks.tasks(forOffset: 0).compactMap { task in
-            guard !task.done, let time = task.time else { return nil }
-            let parts = time.split(separator: ":").compactMap { Int($0) }
-            guard parts.count == 2,
-                  let date = cal.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: now) else { return nil }
-            return Reminder(id: "task-\(task.id.uuidString)-\(time)", title: task.text, date: date,
-                            minutesBefore: 0, source: .task, link: task.links.first, taskID: task.id)
+        // Сегодняшние (включая перенесённые со вчера) и завтрашние: без завтрашних задача на 00:05
+        // не получила бы напоминаний «за 10» и «за 5 минут», они приходятся на вчерашний вечер.
+        // Дальние сроки отсекает окно в check().
+        return [0, 1].flatMap { offset -> [Reminder] in
+            guard let day = cal.date(byAdding: .day, value: offset, to: now) else { return [] }
+            return tasks.tasks(forOffset: offset).compactMap { task in
+                guard !task.done, let time = task.time else { return nil }
+                let parts = time.split(separator: ":").compactMap { Int($0) }
+                guard parts.count == 2,
+                      let date = cal.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: day) else { return nil }
+                return Reminder(id: "task-\(task.id.uuidString)-\(time)", title: task.text, date: date,
+                                minutesBefore: 0, source: .task, link: task.links.first, taskID: task.id)
+            }
         }
     }
 
@@ -220,8 +225,8 @@ final class ReminderCenter {
         snoozed.append((reminder, Date().addingTimeInterval(minutes * 60)))
     }
 
-    private func check() {
-        let now = Date()
+    /// `now` подменяется только в самотесте (--reminders-selftest).
+    func check(now: Date = Date()) {
         let due = snoozed.filter { $0.at <= now }
         snoozed.removeAll { $0.at <= now }
         for item in due {
