@@ -10,12 +10,22 @@
 </p>
 
 <p align="center">
+  <img src="docs/notchly.gif" width="760" alt="The island opening from the notch">
+</p>
+
+<p align="center">
   <img src="docs/screenshots/4-home.png" width="720" alt="Home">
 </p>
 
 <p align="center">
   <img src="docs/screenshots/12-focus-compact.png" width="420" alt="Focus timer in the collapsed island">
 </p>
+
+## Download
+
+Grab `Notchly-1.0.dmg` from [Releases](../../releases), open it and drag Notchly to Applications.
+
+The app is signed with a local certificate, not an Apple Developer ID, so on first launch macOS says it can't verify the developer. Right-click Notchly → **Open** → **Open** (or *System Settings → Privacy & Security → Open Anyway*). You only need to do this once.
 
 ## Features
 
@@ -32,7 +42,7 @@
 | **Clipboard** — history grouped by app, recent **screenshots** (click to copy, drag into any app, save a copy; kept for a few days); entries and screenshots can be given their own names, and a Touch ID–protected API key vault. | <img src="docs/screenshots/4-clipboard-shots.png" width="360"><br><img src="docs/screenshots/4-clipboard.png" width="360"> |
 | **Settings** — a separate window that opens under the island, so every change is visible live: tab order and side, hidden tabs, which cards and HUDs appear, notifications, clipboard and screenshot retention, how long the island stays open. | <img src="docs/screenshots/14-settings-tabs.png" width="360"> |
 
-Also: rich-text notes, a notification center (Gmail over IMAP + app notifications), volume/brightness HUDs that replace the system ones.
+Also: English and Russian interface (switchable live in Settings), rich-text notes, a notification center (Gmail over IMAP + app notifications), volume/brightness HUDs that replace the system ones.
 
 ## Engineering highlights
 
@@ -60,6 +70,8 @@ Everything stays on your Mac: no server, no analytics, no telemetry. Secrets liv
 open build/Notchly.app
 ```
 
+`./scripts/make-dmg.sh` builds `build/Notchly-<version>.dmg` for a release.
+
 Regenerate the icon with `swift scripts/make-icon.swift`.
 
 ### Permissions
@@ -71,11 +83,14 @@ Regenerate the icon with `swift scripts/make-icon.swift`.
 | Audio Capture | per-app volume mixer |
 | Calendars | meeting reminders |
 | Bluetooth, Location | headphone battery, local weather |
+| Desktop folder | keeping Desktop screenshots (only if you turn it on) |
 
 ### Self-checks
 
 ```bash
-.build/debug/Notchly --snapshots /tmp/notchly   # render all states to PNG
+.build/debug/Notchly --snapshots /tmp/notchly [--lang en]   # render all states to PNG
+.build/debug/Notchly --gif docs/notchly.gif --lang en        # the README animation, frame by frame
+python3 scripts/check-l10n.py                                # every UI string has an English translation
 .build/debug/Notchly --reminders-selftest       # reminder scheduling
 .build/debug/Notchly --mixer-selftest           # which apps are playing audio
 .build/debug/Notchly --chime                    # play the reminder sound
@@ -92,7 +107,8 @@ Sources/Notchly/
   GmailClient.swift, SystemNotifications.swift, GeminiAssistant.swift
   Views/                                                      SwiftUI views
 MediaAdapter/                                                 dylib loaded into /usr/bin/perl
-scripts/                                                      signing and icon generation
+  Localization.swift, English.swift                           L(...) lookup and the English table
+scripts/                                                      signing, icon, .dmg, translation check
 ```
 
 ## Roadmap
@@ -102,4 +118,4 @@ scripts/                                                      signing and icon g
 
 ---
 
-<sub>Интерфейс приложения на русском. Notchly — не продукт Apple; «Dynamic Island» — торговая марка Apple Inc.</sub>
+<sub>Notchly is not an Apple product. “Dynamic Island” is a trademark of Apple Inc.</sub>

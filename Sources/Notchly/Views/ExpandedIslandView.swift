@@ -121,9 +121,19 @@ private struct TabButton: View {
 
     @ViewState private var hovering = false
 
+    /// Снимок окна (снапшоты и GIF для README) красит системные символы в кнопках белым,
+    /// и чёрная иконка выбранной вкладки пропадала на белой капсуле. Там берём уже окрашенную картинку.
+    private var icon: Image {
+        guard SnapshotFlags.isRendering, selected,
+              let symbol = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 12.5, weight: .semibold)
+                    .applying(.init(paletteColors: [.black]))) else { return Image(systemName: tab.icon) }
+        return Image(nsImage: symbol)
+    }
+
     var body: some View {
         Button(action: action) {
-            Image(systemName: tab.icon)
+            icon
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(selected ? .black : .white.opacity(hovering ? 1 : 0.65))
                 .symbolEffect(.bounce, value: selected)

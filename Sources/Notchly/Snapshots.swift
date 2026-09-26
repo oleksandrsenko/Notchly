@@ -9,6 +9,8 @@ enum SnapshotFlags {
     static var clipboardMode: ClipboardTab.Mode = .history
     static var settingsPane: SettingsView.Pane = .general
     static var expandedClipGroup: String?
+    /// Идёт офскрин-рендер (снапшоты, GIF), а не живое приложение.
+    static var isRendering = false
 }
 
 /// `Notchly --snapshots <папка>` рендерит все состояния острова в PNG —
@@ -16,6 +18,7 @@ enum SnapshotFlags {
 enum Snapshots {
     @MainActor
     static func render(to dir: URL) {
+        SnapshotFlags.isRendering = true
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let model = IslandModel(persistent: false)
         model.notchSize = CGSize(width: 185, height: 32)

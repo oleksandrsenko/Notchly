@@ -93,8 +93,8 @@ struct IslandRootView: View {
                        height: model.notchSize.height + IslandMetrics.expandedContentHeight)
                 // Открытие: виджеты выходят снизу, когда шторка уже опускается.
                 // Закрытие: сначала всё гаснет, потом сворачивается форма.
-                .opacity(model.expandedContentVisible ? 1 : 0)
-                .offset(y: model.expandedContentVisible ? 0 : 12)
+                .opacity(model.debugFrame?.content ?? (model.expandedContentVisible ? 1 : 0))
+                .offset(y: 12 * (1 - (model.debugFrame?.content ?? (model.expandedContentVisible ? 1 : 0))))
                 .allowsHitTesting(model.expandedContentVisible)
                 .transition(.identity)
         } else if let event = model.event, model.eventExpanded {

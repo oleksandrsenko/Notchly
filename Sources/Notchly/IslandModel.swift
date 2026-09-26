@@ -187,6 +187,9 @@ final class IslandModel: ObservableObject {
     let alarms: AlarmStore
     let settings: AppSettings
     private let screenshotWatcher = ScreenshotFileWatcher()
+    /// Только для GIF в README: форма и видимость содержимого в промежуточном кадре анимации.
+    struct DebugFrame: Equatable { var size: CGSize; var top: CGFloat; var bottom: CGFloat; var content: Double }
+    @Published var debugFrame: DebugFrame?
     /// Открыто окно настроек: остров стоит раскрытым, чтобы изменения было видно сразу.
     @Published var settingsOpen = false
 
@@ -283,9 +286,10 @@ final class IslandModel: ObservableObject {
 
     // MARK: - Геометрия
 
-    var topRadius: CGFloat { isExpanded ? 14 : 7 }
+    var topRadius: CGFloat { debugFrame?.top ?? (isExpanded ? 14 : 7) }
 
     var bottomRadius: CGFloat {
+        if let debugFrame { return debugFrame.bottom }
         if isExpanded { return 34 }
         if let event {
             if event.isCompact { return hasPhysicalNotch ? 11 : 14 }
@@ -328,7 +332,8 @@ final class IslandModel: ObservableObject {
 
     /// Полный размер фигуры с учётом изгибов у верхней кромки.
     var shapeSize: CGSize {
-        CGSize(width: bodySize.width + topRadius * 2, height: bodySize.height)
+        if let debugFrame { return debugFrame.size }
+        return CGSize(width: bodySize.width + topRadius * 2, height: bodySize.height)
     }
 
     /// Живая активность музыки в свёрнутом острове (можно выключить в настройках).

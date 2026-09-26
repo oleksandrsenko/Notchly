@@ -14,6 +14,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let language = AppLanguage(rawValue: CommandLine.arguments[i + 1]) {
             Loc.language = language
         }
+        if let i = CommandLine.arguments.firstIndex(of: "--gif"), i + 1 < CommandLine.arguments.count {
+            MainActor.assumeIsolated {
+                ReadmeGIF.render(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+            }
+            exit(0)
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--snapshots"), i + 1 < CommandLine.arguments.count {
             MainActor.assumeIsolated {
                 Snapshots.render(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
