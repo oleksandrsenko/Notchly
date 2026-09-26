@@ -89,7 +89,8 @@ final class RichTextController: ObservableObject {
 
 /// NSTextView с форматированием. Изменения отдаются наружу как RTF и простой текст.
 struct RichTextEditor: NSViewRepresentable {
-    var initial: NSAttributedString
+    /// Текст при создании редактора. Замыкание, а не значение: иначе RTF разбирался бы при каждой перерисовке.
+    var initial: () -> NSAttributedString
     var controller: RichTextController
     var onChange: (NSAttributedString) -> Void
 
@@ -109,7 +110,7 @@ struct RichTextEditor: NSViewRepresentable {
         tv.textContainerInset = NSSize(width: 4, height: 6)
         tv.isAutomaticQuoteSubstitutionEnabled = false
         tv.typingAttributes = Self.defaultAttributes
-        tv.textStorage?.setAttributedString(initial)
+        tv.textStorage?.setAttributedString(initial())
         tv.delegate = context.coordinator
         controller.textView = tv
         context.coordinator.controller = controller

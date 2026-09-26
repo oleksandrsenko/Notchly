@@ -114,18 +114,29 @@ struct Note: Identifiable, Codable, Equatable {
     /// Имя, которое задали вручную; иначе заголовок — первая строка.
     var customTitle: String?
 
-    var title: String {
-        if let customTitle, !customTitle.isEmpty { return customTitle }
-        let first = text.split(separator: "\n", omittingEmptySubsequences: true).first.map(String.init) ?? ""
-        return first.trimmingCharacters(in: .whitespaces).isEmpty ? L("Новая заметка") : first
+    var title: String { Note.title(text: text, custom: customTitle) }
+
+    /// Первая непустая строка, не длиннее `titleLimit` символов (в списке она всё равно обрезается).
+    /// Смотрим только начало текста: вызывается при каждой напечатанной букве.
+    static func title(text: String, custom: String?) -> String {
+        if let custom, !custom.isEmpty { return custom }
+        let isBreak: (Character) -> Bool = { $0 == "\n" || $0 == "\r\n" }
+        let first = text.drop(while: isBreak).prefix(titleLimit).prefix { !isBreak($0) }
+        return first.trimmingCharacters(in: .whitespaces).isEmpty ? L("Новая заметка") : String(first)
     }
+
+    static let titleLimit = 120
 }
 
 final class NotesStore: ObservableObject {
     @Published private(set) var notes: [Note] = []
-    @Published var selectedID: UUID?
+    @Published var selectedID: UUID? { willSet { flushPending() } }
 
     private var saveWork: DispatchWorkItem?
+    /// Текст, который печатают прямо сейчас. В `notes` он попадает, только когда меняется то, что видно в списке
+    /// (заголовок, пустая ли заметка), и при сохранении. Иначе каждая буква пересобирала бы весь экран заметок
+    /// и заново сериализовала всю заметку в RTF.
+    private var pending: (id: UUID, value: NSAttributedString)?
 
     private let persistent: Bool
 
@@ -140,6 +151,7 @@ final class NotesStore: ObservableObject {
     var selected: Note? { notes.first { $0.id == selectedID } }
 
     func create() {
+        flushPending()
         let note = Note(text: "")
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             notes.insert(note, at: 0)
@@ -149,6 +161,7 @@ final class NotesStore: ObservableObject {
     }
 
     func delete(_ id: UUID) {
+        if pending?.id == id { pending = nil }
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             notes.removeAll { $0.id == id }
             if notes.isEmpty { notes = [Note(text: "")] }
@@ -158,6 +171,7 @@ final class NotesStore: ObservableObject {
     }
 
     func attributed(for id: UUID) -> NSAttributedString {
+        if let pending, pending.id == id { return pending.value }
         guard let note = notes.first(where: { $0.id == id }) else { return NSAttributedString() }
         if let rtf = note.rtf, let value = NSAttributedString(rtf: rtf, documentAttributes: nil) { return value }
         return NSAttributedString(string: note.text, attributes: RichTextEditor.defaultAttributes)
@@ -165,8 +179,29 @@ final class NotesStore: ObservableObject {
 
     func updateRich(_ id: UUID, _ value: NSAttributedString) {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        if let pending, pending.id != id { flushPending() }
+        pending = (id, value)
+        let note = notes[index]
+        let text = value.string
+        if text.isEmpty != note.text.isEmpty
+            || Note.title(text: text, custom: note.customTitle) != note.title {
+            flushPending()
+        }
+        // Пишем на диск с небольшой задержкой, чтобы не делать это на каждую букву.
+        saveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.persist() }
+        saveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// Переносит напечатанное в `notes`: простой текст, RTF и время изменения.
+    private func flushPending() {
+        guard let (id, value) = pending else { return }
+        pending = nil
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[index].rtf = value.rtf(from: NSRange(location: 0, length: value.length), documentAttributes: [:])
-        update(id, text: value.string)
+        notes[index].text = value.string
+        notes[index].updatedAt = Date()
     }
 
     func rename(_ id: UUID, to title: String) {
@@ -176,18 +211,8 @@ final class NotesStore: ObservableObject {
         persist()
     }
 
-    private func update(_ id: UUID, text: String) {
-        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
-        notes[index].text = text
-        notes[index].updatedAt = Date()
-        // Пишем на диск с небольшой задержкой, чтобы не делать это на каждую букву.
-        saveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.persist() }
-        saveWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
-    }
-
     func persist() {
+        flushPending()
         guard persistent else { return }
         save(notes, to: "notes.json")
     }

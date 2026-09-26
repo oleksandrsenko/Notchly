@@ -85,7 +85,7 @@ struct NotesView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 3) {
                     ForEach(store.notes) { note in
-                        NoteRow(note: note, selected: note.id == store.selectedID) {
+                        NoteRow(title: note.title, updatedAt: note.updatedAt, selected: note.id == store.selectedID) {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 store.selectedID = note.id
                             }
@@ -102,7 +102,7 @@ struct NotesView: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(.white.opacity(editorFocused ? 0.09 : 0.06))
                 if let id = store.selectedID {
-                    RichTextEditor(initial: store.attributed(for: id), controller: richController) { value in
+                    RichTextEditor(initial: { store.attributed(for: id) }, controller: richController) { value in
                         store.updateRich(id, value)
                     }
                     .focused($editorFocused)
@@ -136,7 +136,9 @@ func shortTimestamp(_ date: Date) -> String {
 }
 
 private struct NoteRow: View {
-    var note: Note
+    /// Только то, что видно в строке: заметку целиком (с RTF) SwiftUI сравнивал бы при каждом обновлении.
+    var title: String
+    var updatedAt: Date
     var selected: Bool
     var onSelect: () -> Void
     var onDelete: () -> Void
@@ -147,7 +149,7 @@ private struct NoteRow: View {
     @FocusState private var focused: Bool
 
     private func startRename() {
-        draft = note.title
+        draft = title
         renaming = true
         DispatchQueue.main.async { focused = true }
     }
@@ -170,12 +172,12 @@ private struct NoteRow: View {
                         .onExitCommand { renaming = false }
                         .onChange(of: focused) { _, isFocused in if !isFocused { commitRename() } }
                 } else {
-                    Text(note.title)
+                    Text(title)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.white.opacity(selected ? 1 : 0.75))
                         .lineLimit(1)
                 }
-                Text(shortTimestamp(note.updatedAt))
+                Text(shortTimestamp(updatedAt))
                     .font(.system(size: 9.5))
                     .foregroundStyle(.white.opacity(0.4))
             }
