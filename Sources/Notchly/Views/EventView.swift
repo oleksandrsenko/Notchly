@@ -529,9 +529,8 @@ private struct DeviceSheet: View {
     }
 }
 
-/// Маленькая батарейка, которая заполняется при появлении.
-/// Значок батареи. Во время зарядки заливка плавно дорастает до текущего процента,
-/// а по ней мягко пробегает световая волна — как на iPhone.
+/// Значок батареи. При появлении заливка плавно дорастает до текущего процента и по ней пробегает блик;
+/// во время зарядки блик повторяется — как на iPhone. Анимирует Core Animation (`BatteryFillLayer`).
 struct BatteryGlyph: View {
     var percent: Int
     var charging = false
@@ -550,10 +549,9 @@ struct BatteryGlyph: View {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: height * 0.3, style: .continuous)
                     .stroke(.white.opacity(0.45), lineWidth: 1)
-                // Статичная заливка без анимаций: так батарейка ничего не стоит процессору.
-                RoundedRectangle(cornerRadius: height * 0.16, style: .continuous)
-                    .fill(color)
-                    .frame(width: max(2, (width - 4) * CGFloat(percent) / 100))
+                // Размер у слоя постоянный, ширину заливки внутри меняет Core Animation — SwiftUI не пересчитывает кадры.
+                BatteryFillLayer(percent: percent, charging: charging, color: color, cornerRadius: height * 0.16)
+                    .frame(width: width - 4, height: height - 4)
                     .padding(2)
             }
             .frame(width: width, height: height)
