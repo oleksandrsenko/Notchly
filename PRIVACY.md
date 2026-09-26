@@ -1,5 +1,7 @@
 # Privacy in Notchly
 
+**English** · [Русский](PRIVACY.ru.md)
+
 Notchly lives in the most visible spot on your screen and touches personal things — notifications, clipboard, tasks, mail. It is built so that **none of it leaves your Mac** unless you explicitly turn on a service that needs the network.
 
 ## At a glance
@@ -19,7 +21,7 @@ There is **no server, no analytics, no telemetry, no crash reporting.**
 
 ## Secrets never touch the disk in plain text
 
-<img src="docs/screenshots/4-clipboard-vault.png" width="640" alt="API key vault locked behind Touch ID">
+<img src="docs/screenshots/en/4-clipboard-vault.png" width="640" alt="API key vault locked behind Touch ID">
 
 - The API key vault is locked by default. Opening it requires Touch ID or the Mac password (`LocalAuthentication`), and it locks itself again after two minutes or whenever the island closes.
 - Keys are stored as a single Keychain item, never in `UserDefaults` or files.
@@ -27,7 +29,7 @@ There is **no server, no analytics, no telemetry, no crash reporting.**
 
 ## Clipboard history you control
 
-<img src="docs/screenshots/4-clipboard.png" width="640" alt="Clipboard history grouped by app">
+<img src="docs/screenshots/en/4-clipboard.png" width="640" alt="Clipboard history grouped by app">
 
 - Entries marked as concealed or transient by password managers (`org.nspasteboard.ConcealedType`, 1Password, etc.) are **never recorded**.
 - History expires automatically; the retention period is set in *Settings → Clipboard*. *Clear* asks once more before wiping everything, so a stray click can't erase it.
@@ -35,7 +37,7 @@ There is **no server, no analytics, no telemetry, no crash reporting.**
 
 ### Screenshots
 
-<img src="docs/screenshots/4-clipboard-shots.png" width="640" alt="Recent screenshots in the clipboard tab">
+<img src="docs/screenshots/en/4-clipboard-shots.png" width="640" alt="Recent screenshots in the clipboard tab">
 
 - Screenshots taken to the clipboard (⌃⇧⌘4) and copied images are kept in a separate *Screenshots* section — as owner-only files, for a few days (1, 2, 3 or 7; 3 by default), and never more than 40 of them. Old ones are deleted automatically.
 - Screenshots saved to the Desktop are picked up **only if you turn it on**. Notchly then finds new screen captures with a local Spotlight query (`kMDItemIsScreenCapture`) — it does not scan your folders — and copies them; the originals stay where they are. macOS asks for Desktop access the first time.
@@ -43,7 +45,7 @@ There is **no server, no analytics, no telemetry, no crash reporting.**
 
 ## Notifications: read-only, and quiet while you focus
 
-<img src="docs/screenshots/12-focus-event.png" width="640" alt="Focus session finished, 3 notifications held">
+<img src="docs/screenshots/en/12-focus-event.png" width="640" alt="Focus session finished, 3 notifications held">
 
 - Notchly reads the Notification Center database **read-only** (this is why it asks for Full Disk Access). It never modifies the database; “deleting” a notification only hides it inside Notchly.
 - During a Pomodoro focus session, notification cards are held back. At the end you see a single count instead of a stream of distractions — the contents are never shown on screen while you work.
@@ -59,7 +61,7 @@ Links from task descriptions, calendar events and reminder cards are opened only
 | Weather | `api.open-meteo.com` (latitude/longitude only, no account) | at most every 10 min |
 | Approximate location | `ipapi.co` | until you allow precise location (tap the weather card) |
 | Gmail | `imap.gmail.com:993` over TLS, with an app password; one connection stays open and is checked every 30 s (read-only, `EXAMINE`) | only if you connect Gmail |
-| Gemini | `generativelanguage.googleapis.com` | only when you send a prompt |
+| Gemini | `generativelanguage.googleapis.com` — your prompt plus the text and time of your unfinished tasks, so the assistant doesn’t duplicate them | only when you send a prompt |
 | Album art, app icons | `itunes.apple.com` search / lookup (track title + artist, or an app’s bundle ID) | only when the player’s artwork is too small or an icon is missing |
 
 Nothing else goes over the network.
