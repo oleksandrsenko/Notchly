@@ -186,7 +186,8 @@ private struct ScreenshotGrid: View {
                                  copied: copiedID == shot.id,
                                  onCopy: { copy(shot) },
                                  onSave: { shots.saveCopy(shot) },
-                                 onDelete: { shots.remove(shot) })
+                                 onDelete: { shots.remove(shot) },
+                                 onRename: { shots.rename(shot, to: $0) })
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
                     }
                 }
@@ -216,7 +217,9 @@ private struct ShotCell: View {
     var onCopy: () -> Void
     var onSave: () -> Void
     var onDelete: () -> Void
+    var onRename: (String) -> Void
     @ViewState private var hovering = false
+    @ViewState private var renaming = false
 
     var body: some View {
         VStack(spacing: 4) {
@@ -240,6 +243,7 @@ private struct ShotCell: View {
                     VStack {
                         HStack(spacing: 4) {
                             Spacer()
+                            chip("pencil", help: "Переименовать") { renaming = true }
                             chip("square.and.arrow.down", help: "Сохранить копию…", action: onSave)
                             chip("xmark", help: "Удалить", action: onDelete)
                         }
@@ -257,10 +261,39 @@ private struct ShotCell: View {
             .onTapGesture(perform: onCopy)
             .onDrag { NSItemProvider(contentsOf: fileURL) ?? NSItemProvider() }
 
-            Text(shortTimestamp(shot.date))
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.45))
+            Group {
+                if renaming {
+                    InlineRenameField(initial: shot.title ?? "", placeholder: "Название") { value in
+                        guard renaming else { return }
+                        renaming = false
+                        onRename(value)
+                    } onCancel: { renaming = false }
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 6)
+                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.12)))
+                } else if let title = shot.title {
+                    Text(title)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                        .help("\(title) · \(shortTimestamp(shot.date)). Нажмите, чтобы переименовать")
+                } else {
+                    Text(shortTimestamp(shot.date))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.45))
+                        .help("Нажмите, чтобы дать название")
+                }
+            }
+            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+            .frame(width: 128, height: 16)
+            .contentShape(Rectangle())
+            .onTapGesture { if !renaming { renaming = true } }
+        }
+        .contextMenu {
+            Button("Скопировать", action: onCopy)
+            Button("Переименовать…") { renaming = true }
+            Button("Сохранить копию…", action: onSave)
+            Divider()
+            Button("Удалить", role: .destructive, action: onDelete)
         }
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
         .help("Нажмите — скопировать, перетащите — вставить в другое приложение")

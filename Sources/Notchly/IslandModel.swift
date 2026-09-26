@@ -423,7 +423,8 @@ final class IslandModel: ObservableObject {
         }
         // Наушники сообщают о подключении по нескольку раз (разные профили Bluetooth). Повтор не должен
         // заменять уже показанную карточку с зарядом на пустую — обновляем её на месте.
-        if case .device(let device) = event, let shown = self.event, shown.deviceName == device.name {
+        if case .device(let device) = event, let shown = self.event?.deviceName,
+           DeviceBatteryMonitor.baseName(shown) == DeviceBatteryMonitor.baseName(device.name) {
             DeviceLog.write("Карточка уже показана — обновляю на месте")
             return updateDevice(device)
         }
@@ -492,12 +493,18 @@ final class IslandModel: ObservableObject {
     func updateDevice(_ device: DeviceBattery) {
         // Пустой заряд не затирает уже известный.
         guard !device.levels.isEmpty else { return }
-        if event?.deviceName == device.name { DeviceLog.write("Обновляю заряд: " + DeviceLog.describe(device.levels)) }
+        if event?.deviceName != nil { DeviceLog.write("Обновляю заряд: " + DeviceLog.describe(device.levels)) }
+        // Имя оставляем прежним, меняем только заряд.
+        func same(_ shown: DeviceBattery) -> Bool {
+            DeviceBatteryMonitor.baseName(shown.name) == DeviceBatteryMonitor.baseName(device.name)
+        }
         switch event {
-        case .device(let shown) where shown.name == device.name:
-            withAnimation(.smooth(duration: 0.3)) { event = .device(device) }
-        case .deviceSheet(let shown) where shown.name == device.name:
-            withAnimation(.smooth(duration: 0.3)) { event = .deviceSheet(device) }
+        case .device(var shown) where same(shown):
+            shown.levels = device.levels
+            withAnimation(.smooth(duration: 0.3)) { event = .device(shown) }
+        case .deviceSheet(var shown) where same(shown):
+            shown.levels = device.levels
+            withAnimation(.smooth(duration: 0.3)) { event = .deviceSheet(shown) }
         default: break
         }
     }

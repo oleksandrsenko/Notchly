@@ -12,6 +12,8 @@ struct Screenshot: Identifiable, Codable, Equatable {
     var bytes: Int
     /// SHA-256 содержимого: один и тот же снимок не сохраняем дважды.
     var digest: String
+    /// Своё название вместо времени. От него же зависит имя файла при перетаскивании.
+    var title: String?
 }
 
 /// Снимки экрана и скопированные картинки. Лежат несколько дней (по умолчанию 3) в
@@ -142,6 +144,36 @@ final class ScreenshotStore: ObservableObject {
         trimToLimit()
         saveIndex()
         return true
+    }
+
+    // MARK: - Название
+
+    /// Переименовать снимок: меняется и подпись, и имя файла (его видно, когда снимок перетаскивают).
+    /// Пустое название возвращает подпись со временем.
+    func rename(_ shot: Screenshot, to title: String) {
+        guard let i = items.firstIndex(where: { $0.id == shot.id }) else { return }
+        let clean = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+        items[i].title = clean.isEmpty ? nil : clean
+        if !clean.isEmpty {
+            let safe = clean.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+            var name = safe + ".png"
+            var n = 2
+            while items.contains(where: { $0.id != shot.id && $0.fileName == name })
+                    || (persistent && name != shot.fileName
+                        && FileManager.default.fileExists(atPath: Self.directory.appendingPathComponent(name).path)) {
+                name = "\(safe) (\(n)).png"
+                n += 1
+            }
+            if name != shot.fileName {
+                if persistent {
+                    let from = url(for: shot), to = Self.directory.appendingPathComponent(name)
+                    if (try? FileManager.default.moveItem(at: from, to: to)) != nil { items[i].fileName = name }
+                } else {
+                    items[i].fileName = name
+                }
+            }
+        }
+        saveIndex()
     }
 
     // MARK: - Удаление

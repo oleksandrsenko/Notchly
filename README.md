@@ -29,7 +29,7 @@
 | **Music** — artwork with a glow sampled from the cover, scrubbing, repeat-one, quick switch between Apple Music, Spotify and YouTube Music. Live activity with an equalizer in the collapsed island. | <img src="docs/screenshots/4-music.png" width="360"> |
 | **Controls** — volume, brightness and a **per-app volume mixer** built on Core Audio process taps. | <img src="docs/screenshots/4-controls.png" width="360"> |
 | **Files** — a shelf to drop files on and drag them out again (AirDrop, Reveal in Finder, Copy Path). | <img src="docs/screenshots/4-shelf.png" width="360"> |
-| **Clipboard** — history grouped by app, recent **screenshots** (click to copy, drag into any app, save a copy; kept for a few days), and a Touch ID–protected API key vault. | <img src="docs/screenshots/4-clipboard-shots.png" width="360"><br><img src="docs/screenshots/4-clipboard.png" width="360"> |
+| **Clipboard** — history grouped by app, recent **screenshots** (click to copy, drag into any app, save a copy; kept for a few days); entries and screenshots can be given their own names, and a Touch ID–protected API key vault. | <img src="docs/screenshots/4-clipboard-shots.png" width="360"><br><img src="docs/screenshots/4-clipboard.png" width="360"> |
 | **Settings** — a separate window that opens under the island, so every change is visible live: tab order and side, hidden tabs, which cards and HUDs appear, notifications, clipboard and screenshot retention, how long the island stays open. | <img src="docs/screenshots/14-settings-tabs.png" width="360"> |
 
 Also: rich-text notes, a notification center (Gmail over IMAP + app notifications), volume/brightness HUDs that replace the system ones.

@@ -3,7 +3,7 @@ import SwiftUI
 /// История буфера: одна строка на приложение, по клику раскрывается список копирований.
 struct ClipboardView: View {
     @ObservedObject var clipboard: ClipboardMonitor
-    @ViewState private var expanded: String?
+    @ViewState private var expanded: String? = SnapshotFlags.expandedClipGroup
     @ViewState private var copiedID: UUID?
 
     var body: some View {
@@ -39,6 +39,8 @@ struct ClipboardView: View {
                                             copy(item)
                                         } onDelete: {
                                             clipboard.remove(item)
+                                        } onRename: {
+                                            clipboard.rename(item, to: $0)
                                         }
                                         .transition(.move(edge: .top).combined(with: .opacity))
                                     }
@@ -83,7 +85,7 @@ private struct GroupRow: View {
                 Text(group.appName)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
-                Text(group.items.first.map { $0.text.oneLine } ?? "")
+                Text(group.items.first.map { $0.title ?? $0.text.oneLine } ?? "")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.4))
                     .lineLimit(1)
@@ -121,15 +123,37 @@ private struct ClipRow: View {
     var copied: Bool
     var onCopy: () -> Void
     var onDelete: () -> Void
+    var onRename: (String) -> Void
     @ViewState private var hovering = false
+    @ViewState private var renaming = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(item.text.oneLine)
-                .font(.system(size: 11.5))
-                .foregroundStyle(.white.opacity(0.85))
-                .lineLimit(1)
-                .truncationMode(.tail)
+            if renaming {
+                InlineRenameField(initial: item.title ?? "", placeholder: "Название — например, «Адрес доставки»") { value in
+                    guard renaming else { return }
+                    renaming = false
+                    onRename(value)
+                } onCancel: { renaming = false }
+                .font(.system(size: 11.5, weight: .semibold))
+            } else if let title = item.title {
+                // Своё название крупнее, сам текст — рядом, бледнее.
+                Text(title)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(item.text.oneLine)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .lineLimit(1)
+            } else {
+                Text(item.text.oneLine)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
             Spacer(minLength: 6)
             ZStack {
                 if copied {
@@ -137,15 +161,13 @@ private struct ClipRow: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.green)
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
-                } else if hovering {
-                    Button(action: onDelete) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.5))
+                } else if hovering && !renaming {
+                    HStack(spacing: 10) {
+                        rowButton("pencil", help: "Переименовать") { renaming = true }
+                        rowButton("xmark", help: "Удалить", action: onDelete)
                     }
-                    .buttonStyle(.plain)
                     .transition(.opacity)
-                } else {
+                } else if !renaming {
                     Text(shortTimestamp(item.date))
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .monospacedDigit()
@@ -157,11 +179,52 @@ private struct ClipRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(copied ? Color.green.opacity(0.14) : .white.opacity(hovering ? 0.07 : 0)))
+            .fill(copied ? Color.green.opacity(0.14) : .white.opacity(hovering || renaming ? 0.07 : 0)))
         .contentShape(Rectangle())
-        .onTapGesture(perform: onCopy)
+        .onTapGesture { if !renaming { onCopy() } }
+        .contextMenu {
+            Button("Скопировать", action: onCopy)
+            Button("Переименовать…") { renaming = true }
+            Divider()
+            Button("Удалить", role: .destructive, action: onDelete)
+        }
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
         .help("Нажмите, чтобы скопировать")
+    }
+
+    private func rowButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundStyle(.white.opacity(0.55))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+/// Поле для переименования прямо в строке: Return сохраняет, Esc отменяет, клик мимо тоже сохраняет.
+struct InlineRenameField: View {
+    var initial: String
+    var placeholder: String
+    var onCommit: (String) -> Void
+    var onCancel: () -> Void
+    @ViewState private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(placeholder, text: $draft)
+            .textFieldStyle(.plain)
+            .foregroundStyle(.white)
+            .focused($focused)
+            .onSubmit { onCommit(draft) }
+            .onExitCommand(perform: onCancel)
+            .onChange(of: focused) { _, isFocused in if !isFocused { onCommit(draft) } }
+            .onAppear {
+                draft = initial
+                DispatchQueue.main.async { focused = true }
+            }
     }
 }
 

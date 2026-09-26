@@ -169,17 +169,23 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     @objc private func deviceConnected(_ note: IOBluetoothUserNotification, fromDevice device: IOBluetoothDevice) {
         // При запуске система сообщает обо всех уже подключённых устройствах — их пропускаем.
         guard Date().timeIntervalSince(startedAt) > 5 else { return }
-        let name = device.name ?? "Наушники"
+        // Одни и те же AirPods сообщают о подключении несколько раз: «AirPods Pro (Имя)», «AirPods Pro»
+        // и ещё запись без имени. Безымянную пропускаем, остальные сводим к одному имени ниже.
+        guard let name = device.name, !name.isEmpty else {
+            DeviceLog.write("Подключение без имени — пропущено")
+            return
+        }
         // Класс «аудио» сообщают не все: у AirPods Max он бывает другим, поэтому смотрим и на имя.
         let lower = name.lowercased()
         let looksLikeHeadphones = ["airpods", "beats", "headphone", "наушник", "buds"].contains { lower.contains($0) }
         guard device.deviceClassMajor == kBluetoothDeviceClassMajorAudio || looksLikeHeadphones else { return }
         // Наушники подключают несколько профилей подряд, и система сообщает о каждом.
-        if let last = lastConnect[name], Date().timeIntervalSince(last) < 15 {
+        let key = Self.baseName(name)
+        if let last = lastConnect[key], Date().timeIntervalSince(last) < 15 {
             DeviceLog.write("Повтор подключения \(name) — пропущен")
             return
         }
-        lastConnect[name] = Date()
+        lastConnect[key] = Date()
         DeviceLog.write("Подключены \(name)")
         // Заряд появляется в системе не сразу после подключения: IOBluetooth обычно знает его раньше,
         // чем system_profiler. Если сразу не нашли — перечитываем ещё раз и обновляем карточку на месте.
@@ -202,8 +208,9 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
     }
 
     private func connectedDevice(named name: String) -> DeviceBattery {
-        if let known = devices.first(where: { $0.name == name && $0.isConnected }) { return known }
-        let levels = Self.bluetoothLevels()[name] ?? Self.accessoryLevels()[name].map { [$0] } ?? []
+        if let known = devices.first(where: { Self.baseName($0.name) == Self.baseName(name) && $0.isConnected }),
+           !known.levels.isEmpty { return known }
+        let levels = Self.lookup(Self.bluetoothLevels(), name) ?? Self.lookup(Self.accessoryLevels(), name).map { [$0] } ?? []
         return DeviceBattery(name: name, symbol: Self.symbol(for: name, info: ["device_minorType": "Headphones"]),
                              levels: levels)
     }
@@ -232,8 +239,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
                     for (name, value) in entry {
                         guard let info = value as? [String: Any] else { continue }
                         var levels = parseLevels(info, name: name)
-                        if levels.isEmpty, connected, let fromBluetooth = direct[name] { levels = fromBluetooth }
-                        if levels.isEmpty, connected, let fromPower = powerSources[name] { levels = [fromPower] }
+                        if levels.isEmpty, connected, let fromBluetooth = lookup(direct, name) { levels = fromBluetooth }
+                        if levels.isEmpty, connected, let fromPower = lookup(powerSources, name) { levels = [fromPower] }
                         // Magic Mouse, клавиатура и трекпад: в новых macOS system_profiler не отдаёт их заряд,
                         // но он есть у HID-сервиса устройства.
                         if levels.isEmpty, connected, let percent = hidPercent(for: info, in: hid) {
@@ -282,6 +289,20 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject {
             if !levels.isEmpty, !name.isEmpty { result[name] = levels }
         }
         return result
+    }
+
+    /// «AirPods Max (Александр)» и «AirPods Max» — одно и то же устройство: разные службы macOS
+    /// называют его то с именем владельца, то без.
+    static func baseName(_ name: String) -> String {
+        name.replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces).lowercased()
+    }
+
+    /// Сначала точное совпадение имени, потом без имени владельца.
+    static func lookup<T>(_ table: [String: T], _ name: String) -> T? {
+        if let exact = table[name] { return exact }
+        let base = baseName(name)
+        return table.first { baseName($0.key) == base }?.value
     }
 
     /// Сырые значения всех известных источников заряда — для журнала подключений.

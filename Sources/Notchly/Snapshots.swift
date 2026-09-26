@@ -8,6 +8,7 @@ enum SnapshotFlags {
     static var timerMode: TimerView.Mode = .focus
     static var clipboardMode: ClipboardTab.Mode = .history
     static var settingsPane: SettingsView.Pane = .general
+    static var expandedClipGroup: String?
 }
 
 /// `Notchly --snapshots <папка>` рендерит все состояния острова в PNG —
@@ -159,7 +160,17 @@ enum Snapshots {
             model.clipboard.shots.debugAdd(image, date: Date().addingTimeInterval(Double(-i) * 1800))
         }
         model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .clipboard; shot("4-clipboard-shots")
+        if let shot = model.clipboard.shots.items.dropFirst().first {
+            model.clipboard.shots.rename(shot, to: "Макет главной")
+        }
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .clipboard; shot("4-clipboard-shots-named")
         SnapshotFlags.clipboardMode = .history
+        if let item = model.clipboard.groups.first?.items.last {
+            model.clipboard.rename(item, to: "Промпт для острова")
+        }
+        SnapshotFlags.expandedClipGroup = model.clipboard.groups.first?.id
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .clipboard; shot("4-clipboard-named")
+        SnapshotFlags.expandedClipGroup = nil
         SnapshotFlags.batteryPage = 1
         model.tab = .music; model.tab = .home; shot("4-home-airpods")
         SnapshotFlags.batteryPage = 2

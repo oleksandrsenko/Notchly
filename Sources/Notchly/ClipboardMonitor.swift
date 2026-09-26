@@ -5,6 +5,8 @@ struct ClipItem: Identifiable, Equatable, Codable {
     var id = UUID()
     var text: String
     var date: Date
+    /// Своё название вместо начала текста (необязательно).
+    var title: String?
 }
 
 /// Копирования из одного приложения собраны в одну группу.
@@ -125,6 +127,17 @@ final class ClipboardMonitor: ObservableObject {
         ownChangeCount = pasteboard.changeCount
     }
 
+    /// Пустое название — вернуть показ начала текста.
+    func rename(_ item: ClipItem, to title: String) {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        for g in groups.indices {
+            if let i = groups[g].items.firstIndex(where: { $0.id == item.id }) {
+                groups[g].items[i].title = clean.isEmpty ? nil : String(clean.prefix(80))
+            }
+        }
+        scheduleSave()
+    }
+
     func remove(_ item: ClipItem) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             for i in groups.indices { groups[i].items.removeAll { $0.id == item.id } }
@@ -172,13 +185,14 @@ final class ClipboardMonitor: ObservableObject {
 
     func add(text: String, bundleID: String, appName: String) {
         withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
-            // Один и тот же текст не повторяем: оставляем только самое свежее копирование.
+            // Один и тот же текст не повторяем: оставляем только самое свежее копирование (с его названием).
+            let title = groups.lazy.flatMap(\.items).first { $0.text == text }?.title
             for i in groups.indices { groups[i].items.removeAll { $0.text == text } }
             var group = groups.first { $0.bundleID == bundleID }
                 ?? ClipGroup(bundleID: bundleID, appName: appName, items: [])
             groups.removeAll { $0.bundleID == bundleID || $0.items.isEmpty }
             group.appName = appName
-            group.items.insert(ClipItem(text: text, date: Date()), at: 0)
+            group.items.insert(ClipItem(text: text, date: Date(), title: title), at: 0)
             group.items = Array(group.items.prefix(Self.maxItemsPerGroup))
             groups.insert(group, at: 0)
             groups = Array(groups.prefix(Self.maxGroups))
