@@ -98,6 +98,8 @@ struct Alarm: Identifiable, Codable, Equatable {
     var id = UUID()
     var time: String
     var enabled = true
+    /// Будильник из «+5 мин»: после срабатывания удаляется, а не остаётся в списке выключенным.
+    var isSnooze: Bool? = nil
 }
 
 final class AlarmStore: ObservableObject {
@@ -124,11 +126,11 @@ final class AlarmStore: ObservableObject {
         check()
     }
 
-    func add(_ time: String) {
+    func add(_ time: String, snooze: Bool = false) {
         if let i = alarms.firstIndex(where: { $0.time == time }) {
             alarms[i].enabled = true
         } else {
-            alarms.append(Alarm(time: time))
+            alarms.append(Alarm(time: time, isSnooze: snooze ? true : nil))
             alarms.sort { $0.time < $1.time }
         }
         persist()
@@ -147,7 +149,7 @@ final class AlarmStore: ObservableObject {
 
     /// «+5 мин»: одноразовый будильник через 5 минут.
     func snooze(minutes: Int = 5) {
-        add(Self.format(Date().addingTimeInterval(TimeInterval(minutes * 60))))
+        add(Self.format(Date().addingTimeInterval(TimeInterval(minutes * 60))), snooze: true)
     }
 
     /// Ближайший включённый будильник — для подписи.
@@ -168,7 +170,11 @@ final class AlarmStore: ObservableObject {
     private func check() {
         let now = Self.format(Date())
         for alarm in alarms where alarm.enabled && alarm.time == now {
-            if let i = alarms.firstIndex(where: { $0.id == alarm.id }) { alarms[i].enabled = false }
+            if alarm.isSnooze == true {
+                alarms.removeAll { $0.id == alarm.id }
+            } else if let i = alarms.firstIndex(where: { $0.id == alarm.id }) {
+                alarms[i].enabled = false
+            }
             persist()
             onFire?(alarm)
         }
