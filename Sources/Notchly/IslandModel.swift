@@ -379,7 +379,6 @@ final class IslandModel: ObservableObject {
         hud = nil
         peek = false
         clipPeek = nil
-        if let name = event?.deviceName { DeviceLog.write("Карточка \(name) скрыта: остров раскрыли") }
         event = nil
         eventExpanded = false
         eventQueue.removeAll()
@@ -417,20 +416,12 @@ final class IslandModel: ObservableObject {
     }
 
     func showEvent(_ event: IslandEvent) {
-        guard !isExpanded else {
-            if event.deviceName != nil { DeviceLog.write("Карточка не показана: остров раскрыт") }
-            return
-        }
+        guard !isExpanded else { return }
         // Наушники сообщают о подключении по нескольку раз (разные профили Bluetooth). Повтор не должен
         // заменять уже показанную карточку с зарядом на пустую — обновляем её на месте.
         if case .device(let device) = event, let shown = self.event?.deviceName,
            DeviceBatteryMonitor.baseName(shown) == DeviceBatteryMonitor.baseName(device.name) {
-            DeviceLog.write("Карточка уже показана — обновляю на месте")
             return updateDevice(device)
-        }
-        if case .device(let device) = event {
-            DeviceLog.write("Показываю карточку \(device.name): " + DeviceLog.describe(device.levels)
-                            + (self.event != nil ? " (вместо другой карточки)" : ""))
         }
         // Пока показана одна карточка, следующие уведомления ждут своей очереди.
         if self.event != nil, event.isQueued {
@@ -493,7 +484,6 @@ final class IslandModel: ObservableObject {
     func updateDevice(_ device: DeviceBattery) {
         // Пустой заряд не затирает уже известный.
         guard !device.levels.isEmpty else { return }
-        if event?.deviceName != nil { DeviceLog.write("Обновляю заряд: " + DeviceLog.describe(device.levels)) }
         // Имя оставляем прежним, меняем только заряд.
         func same(_ shown: DeviceBattery) -> Bool {
             DeviceBatteryMonitor.baseName(shown.name) == DeviceBatteryMonitor.baseName(device.name)
@@ -537,7 +527,7 @@ final class IslandModel: ObservableObject {
         let task = DispatchWorkItem { [weak self] in
             guard let self else { return }
             if self.eventHovered { return self.scheduleEventDismiss(after: 1) }
-            self.hideEvent(reason: "по таймеру")
+            self.hideEvent()
         }
         eventTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
@@ -546,12 +536,11 @@ final class IslandModel: ObservableObject {
     func dismissEvent() {
         eventTask?.cancel()
         eventHovered = false
-        hideEvent(reason: "закрыта кнопкой или кликом")
+        hideEvent()
     }
 
     /// Сворачиваем карточку обратно в вырез и показываем следующую из очереди.
-    private func hideEvent(reason: String) {
-        if let name = event?.deviceName { DeviceLog.write("Карточка \(name) скрыта: \(reason)") }
+    private func hideEvent() {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.95)) {
             eventExpanded = false
             event = nil

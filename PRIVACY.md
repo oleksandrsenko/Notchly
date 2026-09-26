@@ -9,7 +9,6 @@ Notchly lives in the most visible spot on your screen and touches personal thing
 | Tasks, notes, file shelf, alarms | `~/Library/Application Support/Notchly/*.json` — folder `700`, files `600` (owner only) | only you |
 | Clipboard history | `~/Library/Application Support/Notchly/clipboard.json` (`600`), auto-expires | only you |
 | Screenshots & copied images | `~/Library/Application Support/Notchly/Screenshots/` — folder `700`, files `600`; kept 1–7 days (3 by default), at most 40 | only you |
-| Headphone connection log | `~/Library/Application Support/Notchly/airpods-log.txt` (`600`, capped at ~200 KB): connect times, charge levels, names of system windows over the notch — for debugging, never sent anywhere | only you |
 | Settings | `UserDefaults` (`dev.notchly.app`) — tab layout and on/off switches, no personal data | only you |
 | Gmail app password, Gemini API key | macOS Keychain, *this device only* (never synced to iCloud), readable only while the Mac is unlocked | only Notchly, after macOS asks you |
 | API key vault | macOS Keychain, unlocked with Touch ID / Mac password, auto-locks after 2 minutes | only you |
