@@ -3,7 +3,14 @@ import Foundation
 /// Небольшой помощник на Gemini API: превращает фразу вроде «сегодня в 5 спортзал, в 10 созвон»
 /// в задачи и коротко отвечает на вопросы. Ключ API хранится в Связке ключей.
 final class GeminiAssistant: ObservableObject {
-    struct SuggestedTask { var text: String; var time: String? }
+    struct SuggestedTask {
+        var text: String
+        var time: String?
+        /// Дни задачи; пусто — день, открытый в планере.
+        var days: [Date] = []
+        /// Повтор на столько недель подряд (1 — без повтора).
+        var weeks = 1
+    }
 
     @Published private(set) var hasKey = false
     @Published private(set) var isThinking = false
@@ -43,7 +50,8 @@ final class GeminiAssistant: ObservableObject {
         error = nil
     }
 
-    func ask(_ prompt: String, tasks: [TaskItem], completion: @escaping ([SuggestedTask]) -> Void) {
+    func ask(_ prompt: String, tasks: [TaskItem], events: [CalendarService.Event] = [], selectedDay: Date = Date(),
+             completion: @escaping ([SuggestedTask]) -> Void) {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isThinking,
               let keyData = Keychain.data(service: Self.service, account: Self.account),
@@ -51,7 +59,7 @@ final class GeminiAssistant: ObservableObject {
         isThinking = true
         error = nil
         reply = nil
-        let body = Self.requestBody(for: text, tasks: tasks)
+        let body = Self.requestBody(for: text, tasks: tasks, events: events, selectedDay: selectedDay)
         send(body: body, key: key, models: Self.models) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -72,12 +80,14 @@ final class GeminiAssistant: ObservableObject {
         guard let keyData = Keychain.data(service: service, account: account),
               let key = String(data: keyData, encoding: .utf8) else { return done("ключ не найден в Связке ключей") }
         let assistant = GeminiAssistant()
-        assistant.send(body: requestBody(for: "сегодня в 5 спортзал, в 10 созвон", tasks: []), key: key, models: models) { result in
+        assistant.send(body: requestBody(for: "сегодня в 5 спортзал; в четверг, пятницу и субботу бег в 7 утра; немецкий каждый вторник в 19 на 3 недели", tasks: []), key: key, models: models) { result in
             withExtendedLifetime(assistant) {}
             switch result {
             case .success(let answer):
                 let model = UserDefaults.standard.string(forKey: "gemini.lastModel") ?? "?"
-                done("OK (\(model)): задач \(answer.tasks.count) — " + answer.tasks.map { "\($0.time ?? "--") \($0.text)" }.joined(separator: ", "))
+                done("OK (\(model)): задач \(answer.tasks.count) — " + answer.tasks.map {
+                    "\($0.days.map { isoDay.string(from: $0) }.joined(separator: "/")) \($0.time ?? "--") ×\($0.weeks) \($0.text)"
+                }.joined(separator: ", "))
             case .failure(let message):
                 done("ошибка: \(message)")
             }
@@ -89,21 +99,57 @@ final class GeminiAssistant: ObservableObject {
     private struct Answer { var reply: String; var tasks: [SuggestedTask] }
     private enum Result { case success(Answer), failure(String) }
 
-    private static func requestBody(for text: String, tasks: [TaskItem]) -> [String: Any] {
-        let now = Date().formatted(.dateTime.weekday(.wide).day().month(.wide).year().hour().minute()
-            .locale(Locale(identifier: "ru_RU")))
-        let current = tasks.filter { !$0.done }
-            .map { "- " + ($0.time.map { "\($0) " } ?? "") + $0.text }
+    private static let isoDay: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private static func requestBody(for text: String, tasks: [TaskItem], events: [CalendarService.Event] = [],
+                                    selectedDay: Date = Date()) -> [String: Any] {
+        let ru = Locale(identifier: "ru_RU")
+        let now = Date().formatted(.dateTime.weekday(.wide).day().month(.wide).year().hour().minute().locale(ru))
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        // Модели трудно самой считать даты — даём готовую таблицу на три недели вперёд.
+        let upcoming = (0..<21).compactMap { cal.date(byAdding: .day, value: $0, to: today) }
+            .map { "\(isoDay.string(from: $0)) — " + $0.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(ru)) }
             .joined(separator: "\n")
+        let horizon = cal.date(byAdding: .day, value: 21, to: today) ?? today
+        let current = tasks.filter { !$0.done && TasksStore.day(of: $0) < horizon }
+            .sorted { (TasksStore.day(of: $0), $0.time ?? "") < (TasksStore.day(of: $1), $1.time ?? "") }
+            .map { "- " + isoDay.string(from: max(TasksStore.day(of: $0), today)) + " " + ($0.time.map { "\($0) " } ?? "") + $0.text }
+            .joined(separator: "\n")
+        let busy = events.map { e in
+            "- " + isoDay.string(from: e.start) + " "
+                + (e.isAllDay ? "весь день" : e.start.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(ru))
+                   + "–" + e.end.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(ru)))
+                + " " + e.title
+        }.joined(separator: "\n")
         let system = """
         Ты — компактный помощник в Notchly — «острове» в вырезе экрана Mac. Сейчас \(now).
-        Текущие задачи пользователя:
+        Даты ближайших дней:
+        \(upcoming)
+
+        Задачи пользователя (дата, время, текст):
         \(current.isEmpty ? "(нет)" : current)
+        События календаря:
+        \(busy.isEmpty ? "(нет)" : busy)
+        В планере сейчас открыт день \(isoDay.string(from: selectedDay)).
 
         Если пользователь описывает планы или дела — разбей их на короткие задачи (до 60 символов,
-        начинаются с глагола или существительного, без времени в тексте). Время укажи отдельно в формате ЧЧ:ММ
+        начинаются с глагола или существительного, без времени и дат в тексте). Время укажи отдельно в формате ЧЧ:ММ
         в 24-часовом формате; «в 5» днём/вечером — это 17:00, «в 10» утром — 10:00, если из контекста не ясно иное.
-        Если это вопрос — ответь коротко (1–2 предложения) и не добавляй задач.
+        Дни задачи укажи в dates датами ГГГГ-ММ-ДД из таблицы выше: «в четверг» — ближайший четверг,
+        «в чт, пт и сб» — три даты у одной задачи, «завтра» — завтрашняя дата. Разные дела на разные дни —
+        разные задачи со своими датами. Если день не назван — dates пустой (задача попадёт в открытый день).
+        Если дело повторяется («каждый вторник», «на 3 недели вперёд», «по средам месяц») — в dates первая дата(ы),
+        а в weeks — сколько недель подряд повторять (месяц — 4); без повтора weeks = 1.
+        Если это вопрос (например, когда пользователь свободен) — ответь коротко (1–2 предложения)
+        по задачам и событиям выше и не добавляй задач.
         \(Loc.isRussian ? "Отвечай по-русски." : "Answer in English; write task texts in English too.")
         """
         return [
@@ -123,6 +169,9 @@ final class GeminiAssistant: ObservableObject {
                                 "properties": [
                                     "text": ["type": "STRING"],
                                     "time": ["type": "STRING", "description": "ЧЧ:ММ или пустая строка"],
+                                    "dates": ["type": "ARRAY", "items": ["type": "STRING"],
+                                              "description": "Даты ГГГГ-ММ-ДД; пусто — открытый день"],
+                                    "weeks": ["type": "INTEGER", "description": "Сколько недель повторять, 1 — без повтора"],
                                 ],
                                 "required": ["text"],
                             ],
@@ -183,7 +232,11 @@ final class GeminiAssistant: ObservableObject {
             let tasks = (answer["tasks"] as? [[String: Any]] ?? []).compactMap { item -> SuggestedTask? in
                 guard let text = item["text"] as? String, !text.isEmpty else { return nil }
                 let time = (item["time"] as? String).flatMap { Self.normalizedTime($0) }
-                return SuggestedTask(text: text, time: time)
+                let today = Calendar.current.startOfDay(for: Date())
+                // Прошедшие даты модель иногда путает с будущими — такие отбрасываем.
+                let days = (item["dates"] as? [String] ?? []).compactMap { Self.isoDay.date(from: $0) }.filter { $0 >= today }
+                let weeks = min(max((item["weeks"] as? NSNumber)?.intValue ?? 1, 1), TaskParser.maxWeeks)
+                return SuggestedTask(text: text, time: time, days: days, weeks: weeks)
             }
             done(.success(Answer(reply: answer["reply"] as? String ?? "", tasks: tasks)))
         }.resume()

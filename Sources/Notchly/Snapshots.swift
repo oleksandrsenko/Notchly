@@ -152,6 +152,12 @@ enum Snapshots {
         for tab in IslandTab.allCases { model.tab = tab; shot("4-\(tab.rawValue)") }
         SnapshotFlags.notesMode = .tasks
         model.tab = .home; model.tab = .notes; shot("4-notes-tasks")
+        model.tasks.add(Loc.pick("Немецкий", "German"), time: "19:00", days: [TasksStore.date(forOffset: 2)], weeks: 4)
+        model.tasks.add(Loc.pick("Бег", "Run"), time: "07:30", days: [3, 4, 5].map { TasksStore.date(forOffset: $0) })
+        model.tasks.calendarDay = TasksStore.date(forOffset: 2)
+        SnapshotFlags.notesMode = .calendar
+        model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .notes; shot("4-notes-calendar")
+        model.tasks.calendarDay = TasksStore.date(forOffset: 0)
         SnapshotFlags.notesMode = .notes
         SnapshotFlags.clipboardMode = .vault
         model.tab = .home; RunLoop.main.run(until: Date().addingTimeInterval(0.3)); model.tab = .clipboard; shot("4-clipboard-vault")

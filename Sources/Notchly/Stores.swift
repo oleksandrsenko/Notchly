@@ -231,6 +231,8 @@ struct TaskItem: Identifiable, Codable, Equatable {
     var notes: String?
     /// День задачи (начало дня). У старых задач его нет — тогда считается день создания.
     var day: Date?
+    /// Общий у всех повторов одной задачи («каждый вторник 4 недели»).
+    var seriesID: UUID?
 
     /// Ссылки из описания — открываются кнопками и из напоминания.
     var links: [URL] { TaskItem.links(in: notes ?? "") }
@@ -251,9 +253,12 @@ struct TaskItem: Identifiable, Codable, Equatable {
 /// Компактный список дел. Сохраняется сразу после каждого изменения.
 final class TasksStore: ObservableObject {
     @Published private(set) var items: [TaskItem] = []
-    /// Мини-планер: выбранный день — 0 (сегодня) … 6. Дальше недели задачи не планируются.
+    /// Мини-планер: выбранный день — 0 (сегодня) … 6. Дальше недели — во вкладке «Календарь».
     @Published var selectedDay = 0
     static let days = 7
+    /// «Календарь»: выбранный день и показанный месяц.
+    @Published var calendarDay = Calendar.current.startOfDay(for: Date())
+    @Published var calendarMonth = TasksStore.startOfMonth(Date())
     private let persistent: Bool
 
     init(persistent: Bool = true) {
@@ -276,12 +281,22 @@ final class TasksStore: ObservableObject {
         Calendar.current.startOfDay(for: task.day ?? task.createdAt)
     }
 
+    static func startOfMonth(_ date: Date) -> Date {
+        let cal = Calendar.current
+        return cal.date(from: cal.dateComponents([.year, .month], from: date)) ?? cal.startOfDay(for: date)
+    }
+
     /// Задачи дня. В «сегодня» попадают и невыполненные задачи прошлых дней — они переносятся сами.
     func tasks(forOffset offset: Int) -> [TaskItem] {
-        let target = Self.date(forOffset: offset)
+        tasks(on: Self.date(forOffset: offset))
+    }
+
+    func tasks(on date: Date) -> [TaskItem] {
+        let target = Calendar.current.startOfDay(for: date)
+        let today = Self.date(forOffset: 0)
         return items.filter { task in
             let day = Self.day(of: task)
-            return day == target || (offset == 0 && day < target && !task.done)
+            return day == target || (target == today && day < target && !task.done)
         }
         .sorted { a, b in
             // Невыполненные сверху (по времени), выполненные внизу.
@@ -301,11 +316,48 @@ final class TasksStore: ObservableObject {
 
     /// Новая задача попадает в выбранный день планера.
     func add(_ text: String, time: String? = nil, dayOffset: Int? = nil) {
+        add(text, time: time, days: [Self.date(forOffset: dayOffset ?? selectedDay)])
+    }
+
+    /// Задача на несколько дней и/или с повтором на `weeks` недель: по отдельной задаче на каждый день,
+    /// чтобы каждую можно было отметить и получить о ней напоминание. Возвращает дни добавленных задач.
+    @discardableResult
+    func add(_ text: String, time: String?, days: [Date], weeks: Int = 1) -> [Date] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        var item = TaskItem(text: trimmed, time: time)
-        item.day = Self.date(forOffset: dayOffset ?? selectedDay)
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items.append(item) }
+        guard !trimmed.isEmpty, !days.isEmpty else { return [] }
+        let cal = Calendar.current
+        let dates = (0..<min(max(weeks, 1), TaskParser.maxWeeks)).flatMap { week in
+            days.compactMap { cal.date(byAdding: .day, value: 7 * week, to: cal.startOfDay(for: $0)) }
+        }
+        let unique = Array(Set(dates)).sorted()
+        let series = unique.count > 1 ? UUID() : nil
+        let new = unique.map { day -> TaskItem in
+            var item = TaskItem(text: trimmed, time: time)
+            item.day = day
+            item.seriesID = series
+            return item
+        }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items.append(contentsOf: new) }
+        persist()
+        return unique
+    }
+
+    /// Строка, набранная руками: время и дни берутся из текста, иначе — `fallbackDay`.
+    @discardableResult
+    func addParsed(_ raw: String, fallbackDay: Date, weeks extraWeeks: Int = 1) -> [Date] {
+        let parsed = TaskParser.parse(raw)
+        let weeks = parsed.weeks > 1 ? parsed.weeks : extraWeeks
+        return add(parsed.text, time: parsed.time, days: parsed.days.isEmpty ? [fallbackDay] : parsed.days, weeks: weeks)
+    }
+
+    /// Убирает повторы задачи начиная с этого дня (прошлые остаются как были).
+    func removeSeries(from id: UUID) {
+        guard let task = items.first(where: { $0.id == id }) else { return }
+        guard let series = task.seriesID else { return remove(id) }
+        let start = Self.day(of: task)
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+            items.removeAll { $0.seriesID == series && Self.day(of: $0) >= start }
+        }
         persist()
     }
 
@@ -319,14 +371,11 @@ final class TasksStore: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         if trimmed.isEmpty { return remove(id) }
-        // Время можно поправить прямо в тексте: «Спортзал 18:30».
-        if let match = trimmed.range(of: #"\s(\d{1,2}[:.]\d{2})$"#, options: .regularExpression),
-           let time = GeminiAssistant.normalizedTime(String(trimmed[match]).trimmingCharacters(in: .whitespaces)) {
-            items[i].text = String(trimmed[..<match.lowerBound])
-            items[i].time = time
-        } else {
-            items[i].text = trimmed
-        }
+        // Время и день можно поправить прямо в тексте: «Спортзал 18:30», «Спортзал завтра в 7».
+        let parsed = TaskParser.parse(trimmed)
+        items[i].text = parsed.text
+        if let time = parsed.time { items[i].time = time }
+        if parsed.days.count == 1 { items[i].day = parsed.days[0] }
         persist()
     }
 

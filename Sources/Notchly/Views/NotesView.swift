@@ -2,8 +2,8 @@ import SwiftUI
 
 struct NotesView: View {
     enum Mode: String, CaseIterable {
-        case notes = "Заметки", tasks = "Задачи"
-        static let segments: [Mode] = [.notes, .tasks]
+        case notes = "Заметки", tasks = "Задачи", calendar = "Календарь"
+        static let segments: [Mode] = [.notes, .tasks, .calendar]
         var order: Int { Mode.allCases.firstIndex(of: self) ?? 0 }
     }
 
@@ -59,13 +59,18 @@ struct NotesView: View {
                 } else if mode == .tasks {
                     DayStrip(store: tasks)
                         .transition(.opacity)
+                } else if mode == .calendar {
+                    MonthHeader(store: tasks)
+                        .transition(.opacity)
                 }
             }
 
             ZStack {
                 switch mode {
                 case .notes: notes.transition(.pageSlide(direction))
-                case .tasks: TasksView(store: tasks, gemini: gemini, focus: focus, onAppear: { calendar?.requestIfNeeded() })
+                case .tasks: TasksView(store: tasks, gemini: gemini, focus: focus, calendar: calendar, onAppear: { calendar?.requestIfNeeded() })
+                    .transition(.pageSlide(direction))
+                case .calendar: CalendarView(store: tasks, calendar: calendar ?? CalendarView.offline, focus: focus)
                     .transition(.pageSlide(direction))
                 }
             }

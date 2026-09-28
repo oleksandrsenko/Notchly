@@ -67,9 +67,11 @@ Large artwork with a glow sampled from the cover, the track and artist, a scrubb
 
 **Notes** — a list of notes with a rich-text editor: bold, italic, strikethrough, text size. Notes are saved as you type.
 
-**Tasks** — a one-week planner (Today, Tomorrow, then days of the week) with swipes between days. Each task can have a time and a description; links in descriptions become buttons. Unfinished tasks from past days move to Today by themselves. Any task can start a Pomodoro session bound to it.
+**Tasks** — a one-week planner (Today, Tomorrow, then days of the week) with swipes between days. Each task can have a time and a description; links in descriptions become buttons. Unfinished tasks from past days move to Today by themselves. Any task can start a Pomodoro session bound to it. Times and days are picked up right from the text: “run tomorrow 7:30”, “gym Thu and Fri at 7”, “German every Tuesday 19:00 3 weeks”.
 
-**Gemini assistant** — type your plans in plain language (“gym at 5, call at 10”) and it turns them into short tasks with times; a question gets a short answer instead. It replies in the interface language and needs your own free Gemini API key, stored in the Keychain.
+**Calendar** — a month view next to Tasks: pick any date to see its tasks and events from macOS Calendar, spot free time and plan ahead. A task can repeat weekly for 2–12 weeks.
+
+**Gemini assistant** — type your plans in plain language (“gym Thu and Fri at 7, German every Tuesday for 3 weeks”) and it turns them into short tasks with times, spread over the right days; a question gets a short answer instead. It replies in the interface language and needs your own free Gemini API key, stored in the Keychain.
 
 <p align="center">
   <img src="docs/screenshots/en/4-notes-tasks.png" width="400" alt="Tasks with the Gemini assistant">
@@ -276,6 +278,7 @@ Sources/Notchly/
   GmailClient.swift              IMAP over Network.framework
   SystemNotifications.swift      Notification Center database reader
   GeminiAssistant.swift          plans → tasks via Gemini
+  TaskParser.swift               times, days and repeats from typed tasks
   Settings.swift                 user settings
   Localization.swift, English.swift  L(...) lookup and the English table
   Snapshots.swift, ReadmeGIF.swift, Bench.swift  headless renders and benchmarks

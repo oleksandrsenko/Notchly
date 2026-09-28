@@ -101,14 +101,21 @@ enum SoftChime {
 
 /// Ближайшие события календаря. Доступ спрашивается один раз; без ключа в Info.plist ничего не делаем.
 final class CalendarService: ObservableObject {
-    struct Event: Equatable {
+    struct Event: Equatable, Identifiable {
         var id: String
         var title: String
         var start: Date
         var link: URL?
+        var end: Date = .distantFuture
+        var isAllDay = false
+        var color: NSColor?
     }
 
     @Published private(set) var upcoming: [Event] = []
+    /// Меняется при любом изменении календаря — вкладка «Календарь» перечитывает события.
+    @Published private(set) var revision = 0
+    /// Доступ к календарю выдан и события читаются.
+    var isConnected: Bool { started }
     private let store = EKEventStore()
     private var timer: Timer?
 
@@ -155,6 +162,19 @@ final class CalendarService: ObservableObject {
                          title: $0.title ?? L("Событие"), start: $0.startDate, link: Self.meetingLink(in: $0)) }
             .sorted { $0.start < $1.start }
         if events != upcoming { upcoming = events }
+        revision += 1
+    }
+
+    /// События за период — для вкладки «Календарь» и для Gemini. Без доступа — пусто.
+    func events(from start: Date, to end: Date) -> [Event] {
+        guard started else { return [] }
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+        return store.events(matching: predicate)
+            .filter { $0.status != .canceled }
+            .map { Event(id: $0.calendarItemIdentifier + "@\(Int($0.startDate.timeIntervalSince1970))",
+                         title: $0.title ?? L("Событие"), start: $0.startDate, link: Self.meetingLink(in: $0),
+                         end: $0.endDate, isAllDay: $0.isAllDay, color: $0.calendar.flatMap { NSColor(cgColor: $0.cgColor) }) }
+            .sorted { ($0.isAllDay ? 0 : 1, $0.start) < ($1.isAllDay ? 0 : 1, $1.start) }
     }
 
     /// Ссылка на созвон: сначала поле URL, потом Zoom / Meet / Teams / FaceTime в месте или заметках.

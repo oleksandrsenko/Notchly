@@ -5,6 +5,7 @@ struct TasksView: View {
     @ObservedObject var store: TasksStore
     @ObservedObject var gemini: GeminiAssistant
     var focus: FocusTimer
+    var calendar: CalendarService? = nil
     @ViewState private var draft = ""
     @FocusState private var draftFocused: Bool
     /// Задача, у которой открыто описание.
@@ -49,7 +50,7 @@ struct TasksView: View {
             }
             .frame(maxWidth: .infinity)
 
-            GeminiPanel(gemini: gemini, store: store)
+            GeminiPanel(gemini: gemini, store: store, calendar: calendar)
                 .frame(width: 236)
         }
     }
@@ -91,20 +92,45 @@ struct TasksView: View {
         }
     }
 
+    /// Если задача ушла на другой день недели — показываем его; дальше недели — остаёмся, она видна в «Календаре».
+    static func reveal(_ days: [Date], in store: TasksStore) {
+        guard let first = days.first,
+              let offset = Calendar.current.dateComponents([.day], from: TasksStore.date(forOffset: 0), to: first).day,
+              (0..<TasksStore.days).contains(offset), offset != store.selectedDay,
+              !days.contains(TasksStore.date(forOffset: store.selectedDay)) else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) { store.selectedDay = offset }
+    }
+
+    /// «чт, пт, сб» или «1 окт., 8 окт. …» — куда легли новые задачи.
+    static func daysSummary(_ days: [Date]) -> String {
+        let sorted = Array(Set(days)).sorted()
+        let horizon = TasksStore.date(forOffset: TasksStore.days)
+        let near = sorted.allSatisfy { $0 < horizon }
+        let names = sorted.prefix(4).map { day -> String in
+            if day == TasksStore.date(forOffset: 0) { return L("сегодня") }
+            if day == TasksStore.date(forOffset: 1) { return L("завтра") }
+            return near ? day.formatted(.dateTime.weekday(.abbreviated).locale(Loc.locale))
+                        : day.formatted(.dateTime.day().month(.abbreviated).locale(Loc.locale))
+        }
+        return names.joined(separator: ", ") + (sorted.count > 4 ? " …" : "")
+    }
+
     private var addRow: some View {
         HStack(spacing: 8) {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(draftFocused ? 0.8 : 0.35))
-            TextField(store.selectedDay == 0 ? L("Новая задача") : L("Задача на %@", "\(TasksView.dayTitle(store.selectedDay, lowercased: true))"),
+            TextField(store.selectedDay == 0 ? L("Новая задача — «бег завтра 7:30»") : L("Задача на %@", "\(TasksView.dayTitle(store.selectedDay, lowercased: true))"),
                       text: $draft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .focused($draftFocused)
                 .onSubmit {
-                    store.add(draft)
+                    // «Бег в чт, пт 7:00» — время и дни берутся из текста, иначе выбранный день.
+                    let days = store.addParsed(draft, fallbackDay: TasksStore.date(forOffset: store.selectedDay))
                     draft = ""
                     draftFocused = true
+                    TasksView.reveal(days, in: store)
                 }
         }
         .padding(.horizontal, 8)
@@ -388,9 +414,11 @@ private struct PlainNotesEditor: NSViewRepresentable {
 private struct GeminiPanel: View {
     @ObservedObject var gemini: GeminiAssistant
     @ObservedObject var store: TasksStore
+    var calendar: CalendarService?
     @ViewState private var prompt = ""
     @ViewState private var key = ""
     @ViewState private var added = 0
+    @ViewState private var addedDays = ""
 
     private static let gradient = LinearGradient(
         colors: [Color(red: 0.35, green: 0.55, blue: 1), Color(red: 0.72, green: 0.45, blue: 1)],
@@ -438,9 +466,10 @@ private struct GeminiPanel: View {
                 } else if let reply = gemini.reply {
                     Text(reply).foregroundStyle(.white.opacity(0.85))
                 } else if added > 0 {
-                    Text(L("Добавлено задач: %@", "\(added)")).foregroundStyle(.green.opacity(0.85))
+                    Text(L("Добавлено задач: %@", "\(added)") + (addedDays.isEmpty ? "" : " · " + addedDays))
+                        .foregroundStyle(.green.opacity(0.85))
                 } else {
-                    Text(L("Расскажите о планах: «сегодня в 5 спортзал, в 10 созвон» — разложу по задачам."))
+                    Text(L("Расскажите о планах: «в чт и пт спортзал в 7, немецкий каждый вторник» — разложу по дням."))
                         .foregroundStyle(.white.opacity(0.4))
                 }
             }
@@ -511,9 +540,16 @@ private struct GeminiPanel: View {
         guard !text.isEmpty else { return }
         prompt = ""
         added = 0
-        gemini.ask(text, tasks: store.items) { tasks in
-            for task in tasks { store.add(task.text, time: task.time) }
-            added = tasks.count
+        let selected = TasksStore.date(forOffset: store.selectedDay)
+        let today = TasksStore.date(forOffset: 0)
+        let events = calendar?.events(from: today, to: TasksStore.date(forOffset: 21)) ?? []
+        gemini.ask(text, tasks: store.items, events: events, selectedDay: selected) { tasks in
+            let days = tasks.flatMap { task in
+                store.add(task.text, time: task.time, days: task.days.isEmpty ? [selected] : task.days, weeks: task.weeks)
+            }
+            added = days.count
+            addedDays = TasksView.daysSummary(days)
+            TasksView.reveal(days, in: store)
         }
     }
 }
