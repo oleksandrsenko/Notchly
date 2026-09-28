@@ -71,7 +71,9 @@ Large artwork with a glow sampled from the cover, the track and artist, a scrubb
 
 **Calendar** — a month view next to Tasks: pick any date to see its tasks and events from macOS Calendar, spot free time and plan ahead. A task can repeat weekly for 2–12 weeks.
 
-**Gemini assistant** — type your plans in plain language (“gym Thu and Fri at 7, German every Tuesday for 3 weeks”) and it turns them into short tasks with times, spread over the right days; a question gets a short answer instead. It replies in the interface language and needs your own free Gemini API key, stored in the Keychain.
+**On your iPhone** — tasks are copied to a separate “Notchly” calendar in iCloud, so they show up in Calendar on your iPhone with a reminder 10 minutes before. It works both ways: move or delete an event on the phone, or add one to the “Notchly” calendar, and the task changes in Notchly too. Can be turned off in Settings → Notifications.
+
+**Gemini assistant** — type your plans in plain language (“gym Thu and Fri at 7, German every Tuesday for 3 weeks”) and it turns them into short tasks with times, spread over the right days. It can also change existing plans: “cancel Saturday’s run”, “move German to 19:30”, “I’m done with the gym — delete all repeats”; a question gets a short answer instead. It replies in the interface language and needs your own free Gemini API key, stored in the Keychain.
 
 <p align="center">
   <img src="docs/screenshots/en/4-notes-tasks.png" width="400" alt="Tasks with the Gemini assistant">
@@ -279,6 +281,7 @@ Sources/Notchly/
   SystemNotifications.swift      Notification Center database reader
   GeminiAssistant.swift          plans → tasks via Gemini
   TaskParser.swift               times, days and repeats from typed tasks
+  TaskCalendarSync.swift         tasks ⇄ “Notchly” calendar in iCloud
   Settings.swift                 user settings
   Localization.swift, English.swift  L(...) lookup and the English table
   Snapshots.swift, ReadmeGIF.swift, Bench.swift  headless renders and benchmarks

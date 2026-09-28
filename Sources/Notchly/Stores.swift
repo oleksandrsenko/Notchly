@@ -350,6 +350,40 @@ final class TasksStore: ObservableObject {
         return add(parsed.text, time: parsed.time, days: parsed.days.isEmpty ? [fallbackDay] : parsed.days, weeks: weeks)
     }
 
+    /// Правка задачи целиком: пришла из календаря телефона или от Gemini. nil — поле не меняется;
+    /// `clearTime` убирает время («перенеси на завтра без времени»).
+    func edit(_ id: UUID, text: String? = nil, day: Date? = nil, time: String? = nil, clearTime: Bool = false) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        var item = items[i]
+        if let text, !text.trimmingCharacters(in: .whitespaces).isEmpty { item.text = text }
+        if let day { item.day = Calendar.current.startOfDay(for: day) }
+        if let time { item.time = time } else if clearTime { item.time = nil }
+        guard item != items[i] else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items[i] = item }
+        persist()
+    }
+
+    /// Изменение с телефона: состояние задачи становится ровно таким, как у события.
+    func applySynced(_ id: UUID, text: String, day: Date?, time: String?) {
+        edit(id, text: text, day: day, time: time, clearTime: time == nil)
+    }
+
+    /// Событие, добавленное в календарь «Notchly» на телефоне, — новая задача.
+    func addSynced(_ text: String, day: Date, time: String?, notes: String?) -> UUID {
+        var item = TaskItem(text: text.isEmpty ? L("Событие") : text, time: time)
+        item.day = Calendar.current.startOfDay(for: day)
+        item.notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? notes : nil
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items.append(item) }
+        persist()
+        return item.id
+    }
+
+    func setDone(_ id: UUID, _ done: Bool = true) {
+        guard let i = items.firstIndex(where: { $0.id == id }), items[i].done != done else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.88)) { items[i].done = done }
+        persist()
+    }
+
     /// Убирает повторы задачи начиная с этого дня (прошлые остаются как были).
     func removeSeries(from id: UUID) {
         guard let task = items.first(where: { $0.id == id }) else { return }

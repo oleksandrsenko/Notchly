@@ -157,6 +157,16 @@ enum English {
         "Спросить Gemini": "Ask Gemini",
 
         // Календарь
+        "Копировать задачи в календарь «Notchly»": "Copy tasks to the “Notchly” calendar",
+        "Календарь и iPhone": "Calendar & iPhone",
+        "Задачи появляются в календаре «Notchly» и на iPhone через iCloud. Изменения с телефона — перенос, удаление, новые события в этом календаре — возвращаются в Notchly.":
+            "Tasks appear in the “Notchly” calendar and on your iPhone via iCloud. Changes made on the phone — moving, deleting, new events in that calendar — come back to Notchly.",
+        "Учётная запись календаря: %@.": "Calendar account: %@.",
+        "Это не iCloud — на iPhone задач не будет. Включите «Календари» в настройках iCloud на Mac.":
+            "This isn't iCloud, so tasks won't reach your iPhone. Turn on Calendars in iCloud settings on your Mac.",
+        "macOS спросит доступ к календарю при первом открытии задач.": "macOS will ask for calendar access the first time you open Tasks.",
+        "Нет доступа к календарю: разрешите его в Системных настройках → Конфиденциальность → Календари.":
+            "No calendar access: allow it in System Settings → Privacy → Calendars.",
         "День свободен — можно планировать": "The day is free — plan away",
         "Задача — «немецкий 18:30»": "Task — “German 18:30”",
         "Занято: %@": "Busy: %@",

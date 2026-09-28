@@ -543,13 +543,22 @@ private struct GeminiPanel: View {
         let selected = TasksStore.date(forOffset: store.selectedDay)
         let today = TasksStore.date(forOffset: 0)
         let events = calendar?.events(from: today, to: TasksStore.date(forOffset: 21)) ?? []
-        gemini.ask(text, tasks: store.items, events: events, selectedDay: selected) { tasks in
+        gemini.ask(text, tasks: store.items, events: events, selectedDay: selected) { tasks, changes in
+            // Сначала правки: метки ссылаются на задачи, какими они были до ответа.
+            for change in changes {
+                switch change.action {
+                case .delete: store.remove(change.id)
+                case .deleteSeries: store.removeSeries(from: change.id)
+                case .done: store.setDone(change.id)
+                case .update: store.edit(change.id, text: change.text, day: change.day, time: change.time, clearTime: change.clearTime)
+                }
+            }
             let days = tasks.flatMap { task in
                 store.add(task.text, time: task.time, days: task.days.isEmpty ? [selected] : task.days, weeks: task.weeks)
             }
             added = days.count
             addedDays = TasksView.daysSummary(days)
-            TasksView.reveal(days, in: store)
+            TasksView.reveal(days + changes.compactMap(\.day), in: store)
         }
     }
 }

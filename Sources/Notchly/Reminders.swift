@@ -116,7 +116,8 @@ final class CalendarService: ObservableObject {
     @Published private(set) var revision = 0
     /// Доступ к календарю выдан и события читаются.
     var isConnected: Bool { started }
-    private let store = EKEventStore()
+    /// Общий с синхронизацией задач (TaskCalendarSync).
+    let store = EKEventStore()
     private var timer: Timer?
 
     private var started = false
@@ -157,7 +158,7 @@ final class CalendarService: ObservableObject {
         let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-60),
                                                  end: now.addingTimeInterval(24 * 3600), calendars: nil)
         let events = store.events(matching: predicate)
-            .filter { !$0.isAllDay && $0.status != .canceled }
+            .filter { !$0.isAllDay && $0.status != .canceled && !TaskCalendarSync.isMirror($0) }
             .map { Event(id: $0.calendarItemIdentifier + "@\(Int($0.startDate.timeIntervalSince1970))",
                          title: $0.title ?? L("Событие"), start: $0.startDate, link: Self.meetingLink(in: $0)) }
             .sorted { $0.start < $1.start }
@@ -170,7 +171,7 @@ final class CalendarService: ObservableObject {
         guard started else { return [] }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         return store.events(matching: predicate)
-            .filter { $0.status != .canceled }
+            .filter { $0.status != .canceled && !TaskCalendarSync.isMirror($0) }
             .map { Event(id: $0.calendarItemIdentifier + "@\(Int($0.startDate.timeIntervalSince1970))",
                          title: $0.title ?? L("Событие"), start: $0.startDate, link: Self.meetingLink(in: $0),
                          end: $0.endDate, isAllDay: $0.isAllDay, color: $0.calendar.flatMap { NSColor(cgColor: $0.cgColor) }) }

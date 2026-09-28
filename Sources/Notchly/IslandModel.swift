@@ -182,6 +182,8 @@ final class IslandModel: ObservableObject {
     let gmail = GmailClient()
     let systemNotifications = SystemNotificationsReader()
     let reminders: ReminderCenter
+    /// Задачи ⇄ календарь «Notchly» в iCloud (видно на iPhone).
+    let calendarSync: TaskCalendarSync
     let focus = FocusTimer()
     let countdown = CountdownTimer()
     let alarms: AlarmStore
@@ -207,6 +209,7 @@ final class IslandModel: ObservableObject {
         notes = NotesStore(persistent: persistent)
         tasks = TasksStore(persistent: persistent)
         reminders = ReminderCenter(tasks: tasks)
+        calendarSync = TaskCalendarSync(tasks: tasks, calendar: reminders.calendar, settings: settings)
         weather = WeatherService(live: persistent)
         alarms = AlarmStore(persistent: persistent)
         tab = IslandTab(rawValue: UserDefaults.standard.string(forKey: "island.tab") ?? "") ?? .home
@@ -247,7 +250,10 @@ final class IslandModel: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] _ in DispatchQueue.main.async { withAnimation(IslandMetrics.softSpring) { self?.objectWillChange.send() } } }
             .store(in: &bag)
-        if persistent { reminders.start() }
+        if persistent {
+            reminders.start()
+            calendarSync.start()
+        }
         gmail.onNew = { [weak self] mail in
             guard self?.settings.gmailNotifications == true else { return }
             self?.showNotification(AppNotification(

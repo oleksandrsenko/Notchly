@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import EventKit
 
 /// Окно настроек открывается отдельно, прямо под островом. Пока оно открыто, остров стоит раскрытым,
 /// и каждое изменение сразу видно на нём.
@@ -313,11 +314,34 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
             }
             Section {
+                Toggle(L("Копировать задачи в календарь «Notchly»"), isOn: $settings.calendarSync)
+            } header: {
+                Text(L("Календарь и iPhone"))
+            } footer: {
+                Text(calendarSyncFooter)
+                    .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Section {
                 Toggle(L("Тихий сигнал: напоминания, таймер, будильник"), isOn: $settings.sounds)
                 Button(L("Прослушать")) { SoftChime.play() }
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var calendarSyncFooter: String {
+        let base = L("Задачи появляются в календаре «Notchly» и на iPhone через iCloud. Изменения с телефона — перенос, удаление, новые события в этом календаре — возвращаются в Notchly.")
+        guard settings.calendarSync else { return base }
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .fullAccess:
+            if let account = model.calendarSync.accountTitle {
+                return base + "\n" + L("Учётная запись календаря: %@.", account)
+                    + (account.localizedCaseInsensitiveContains("icloud") ? "" : " " + L("Это не iCloud — на iPhone задач не будет. Включите «Календари» в настройках iCloud на Mac."))
+            }
+            return base
+        case .notDetermined: return base + "\n" + L("macOS спросит доступ к календарю при первом открытии задач.")
+        default: return base + "\n" + L("Нет доступа к календарю: разрешите его в Системных настройках → Конфиденциальность → Календари.")
+        }
     }
 
     // MARK: Буфер обмена

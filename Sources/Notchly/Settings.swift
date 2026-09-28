@@ -41,6 +41,8 @@ final class AppSettings: ObservableObject {
     @Published var gmailNotifications: Bool { didSet { store(gmailNotifications, "settings.gmailNotifications") } }
     @Published var reminders: Bool { didSet { store(reminders, "settings.reminders") } }
     @Published var sounds: Bool { didSet { store(sounds, "settings.sounds") } }
+    /// Задачи копируются в календарь «Notchly» (iCloud) — их видно на iPhone.
+    @Published var calendarSync: Bool { didSet { store(calendarSync, "settings.calendarSync") } }
 
     @Published var clipboardHistory: Bool { didSet { store(clipboardHistory, "settings.clipboardHistory") } }
     @Published var screenshots: Bool { didSet { store(screenshots, "settings.screenshots") } }
@@ -75,6 +77,7 @@ final class AppSettings: ObservableObject {
         gmailNotifications = bool("settings.gmailNotifications", true)
         reminders = bool("settings.reminders", true)
         sounds = bool("settings.sounds", true)
+        calendarSync = persistent && bool("settings.calendarSync", true)
         clipboardHistory = bool("settings.clipboardHistory", true)
         screenshots = bool("settings.screenshots", true)
         screenshotFiles = bool("settings.screenshotFiles", false)

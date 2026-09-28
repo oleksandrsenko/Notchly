@@ -16,6 +16,7 @@ Notchly lives in the most visible spot on your screen and touches personal thing
 | API key vault | macOS Keychain, unlocked with Touch ID / Mac password, auto-locks after 2 minutes | only you |
 | App notifications | read-only from macOS Notification Center database | never copied or sent anywhere |
 | Calendar events | EventKit, in memory only | never stored or sent |
+| Task copies in the “Notchly” calendar | written through EventKit into your own calendar account (iCloud if Calendars is on) — title, date, time, description. Turn off in Settings → Notifications | you and your devices signed in to that account |
 
 There is **no server, no analytics, no telemetry, no crash reporting.**
 
@@ -61,7 +62,7 @@ Links from task descriptions, calendar events and reminder cards are opened only
 | Weather | `api.open-meteo.com` (latitude/longitude only, no account) | at most every 10 min |
 | Approximate location | `ipapi.co` | until you allow precise location (tap the weather card) |
 | Gmail | `imap.gmail.com:993` over TLS, with an app password; one connection stays open and is checked every 30 s (read-only, `EXAMINE`) | only if you connect Gmail |
-| Gemini | `generativelanguage.googleapis.com` — your prompt plus the text and time of your unfinished tasks, so the assistant doesn’t duplicate them | only when you send a prompt |
+| Gemini | `generativelanguage.googleapis.com` — your prompt plus the text, date and time of your unfinished tasks for the next two months and your calendar events for the next three weeks, so the assistant can place, move and delete tasks and tell you when you’re free | only when you send a prompt |
 | Album art, app icons | `itunes.apple.com` search / lookup (track title + artist, or an app’s bundle ID) | only when the player’s artwork is too small or an icon is missing |
 
 Nothing else goes over the network.
