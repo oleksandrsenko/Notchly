@@ -469,7 +469,7 @@ private struct GeminiPanel: View {
                     Text(L("Добавлено задач: %@", "\(added)") + (addedDays.isEmpty ? "" : " · " + addedDays))
                         .foregroundStyle(.green.opacity(0.85))
                 } else {
-                    Text(L("Расскажите о планах: «в чт и пт спортзал в 7, немецкий каждый вторник» — разложу по дням."))
+                    Text(L("Напишите свои планы — разложу по дням. Например: «спортзал в чт и пт в 7»."))
                         .foregroundStyle(.white.opacity(0.4))
                 }
             }

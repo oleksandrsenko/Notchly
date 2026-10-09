@@ -29,6 +29,8 @@ final class AppSettings: ObservableObject {
     @Published var closeDelay: Double { didSet { store(closeDelay, "settings.closeDelay") } }
     /// Открывать остров на главной (иначе — на последней вкладке).
     @Published var openOnHome: Bool { didSet { store(openOnHome, "settings.openOnHome") } }
+    /// Раздел «Календарь» рядом с «Заметками» и «Задачами».
+    @Published var calendarTab: Bool { didSet { store(calendarTab, "settings.calendarTab") } }
 
     @Published var musicActivity: Bool { didSet { store(musicActivity, "settings.musicActivity") } }
     @Published var trackPeek: Bool { didSet { store(trackPeek, "settings.trackPeek") } }
@@ -65,6 +67,7 @@ final class AppSettings: ObservableObject {
         tabs = Self.normalized(savedTabs ?? Self.defaultTabs)
         closeDelay = persistent ? (d.object(forKey: "settings.closeDelay") as? Double ?? 1.2) : 1.2
         openOnHome = bool("settings.openOnHome", true)
+        calendarTab = bool("settings.calendarTab", true)
         musicActivity = bool("settings.musicActivity", true)
         trackPeek = bool("settings.trackPeek", true)
         hud = bool("settings.hud", true)

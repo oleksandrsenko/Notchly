@@ -3,7 +3,6 @@ import SwiftUI
 struct NotesView: View {
     enum Mode: String, CaseIterable {
         case notes = "Заметки", tasks = "Задачи", calendar = "Календарь"
-        static let segments: [Mode] = [.notes, .tasks, .calendar]
         var order: Int { Mode.allCases.firstIndex(of: self) ?? 0 }
     }
 
@@ -12,6 +11,7 @@ struct NotesView: View {
     var gemini: GeminiAssistant
     var focus: FocusTimer
     var calendar: CalendarService? = nil
+    @ObservedObject var settings: AppSettings
     @ViewState private var direction: Edge = .trailing
     @ViewState private var richController = RichTextController()
     @FocusState private var editorFocused: Bool
@@ -23,16 +23,16 @@ struct NotesView: View {
             HStack(spacing: 8) {
                 // Каждый раздел — отдельная капсула с промежутком.
                 HStack(spacing: 8) {
-                    ForEach(Mode.segments, id: \.self) { item in
+                    ForEach(segments, id: \.self) { item in
                         Button { switchTo(item) } label: {
                             Text(L(item.rawValue))
                                 .font(.system(size: 11.5, weight: .semibold))
-                                .foregroundStyle(mode == item ? .black : .white.opacity(0.6))
+                                .foregroundStyle(shownMode == item ? .black : .white.opacity(0.6))
                                 .padding(.horizontal, 11)
                                 .frame(height: 24)
                                 .background(Capsule().fill(.white.opacity(0.08)))
                                 .background {
-                                    if mode == item {
+                                    if shownMode == item {
                                         Capsule().fill(.white).matchedGeometryEffect(id: "segment", in: segmentNS)
                                     }
                                 }
@@ -44,7 +44,7 @@ struct NotesView: View {
 
                 Spacer()
 
-                if mode == .notes {
+                if shownMode == .notes {
                     FormatBar(controller: richController)
                         .transition(.opacity)
                     IconButton(systemName: "square.and.pencil", size: 12, padding: 5) {
@@ -56,17 +56,17 @@ struct NotesView: View {
                     }
                     .foregroundStyle(.white.opacity(0.8))
                     .transition(.blurFade)
-                } else if mode == .tasks {
+                } else if shownMode == .tasks {
                     DayStrip(store: tasks)
                         .transition(.opacity)
-                } else if mode == .calendar {
+                } else if shownMode == .calendar {
                     MonthHeader(store: tasks)
                         .transition(.opacity)
                 }
             }
 
             ZStack {
-                switch mode {
+                switch shownMode {
                 case .notes: notes.transition(.pageSlide(direction))
                 case .tasks: TasksView(store: tasks, gemini: gemini, focus: focus, calendar: calendar, onAppear: { calendar?.requestIfNeeded() })
                     .transition(.pageSlide(direction))
@@ -77,7 +77,16 @@ struct NotesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onDisappear { store.persist() }
+        .onChange(of: settings.calendarTab) { _, on in
+            if !on && mode == .calendar { mode = .tasks }
+        }
     }
+
+    /// «Календарь» можно убрать в настройках.
+    private var segments: [Mode] { settings.calendarTab ? [.notes, .tasks, .calendar] : [.notes, .tasks] }
+
+    /// Раздел, который реально показан: выключенный «Календарь» не открываем.
+    private var shownMode: Mode { segments.contains(mode) ? mode : .tasks }
 
     private func switchTo(_ item: Mode) {
         guard item != mode else { return }

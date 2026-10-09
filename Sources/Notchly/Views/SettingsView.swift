@@ -245,6 +245,9 @@ struct SettingsView: View {
                     }
                 }
             }
+            Section(L("Заметки")) {
+                Toggle(L("Раздел «Календарь» рядом с задачами"), isOn: $settings.calendarTab)
+            }
         }
         .formStyle(.grouped)
     }

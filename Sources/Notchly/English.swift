@@ -14,6 +14,7 @@ enum English {
         "Заметки": "Notes",
         "Задачи": "Tasks",
         "Календарь": "Calendar",
+        "Раздел «Календарь» рядом с задачами": "Calendar section next to Tasks",
         "История": "History",
         "Снимки": "Screenshots",
         "API-ключи": "API Keys",
@@ -152,8 +153,8 @@ enum English {
         "Удалить ключ API": "Remove API key",
         "Думаю…": "Thinking…",
         "Добавлено задач: %@": "Tasks added: %@",
-        "Расскажите о планах: «в чт и пт спортзал в 7, немецкий каждый вторник» — разложу по дням.":
-            "Tell me your plans: “gym Thu and Fri at 7, German every Tuesday” — I'll spread them over the days.",
+        "Напишите свои планы — разложу по дням. Например: «спортзал в чт и пт в 7».":
+            "Write your plans — I'll spread them over the days. For example: “gym Thu and Fri at 7”.",
         "Спросить Gemini": "Ask Gemini",
 
         // Календарь

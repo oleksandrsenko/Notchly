@@ -286,6 +286,12 @@ final class TasksStore: ObservableObject {
         return cal.date(from: cal.dateComponents([.year, .month], from: date)) ?? cal.startOfDay(for: date)
     }
 
+    /// Переносится на сегодня только обычное дело без времени. Пропущенный повтор («немецкий каждый вторник»)
+    /// и задача на время («урок в 10:55») остаются в своём дне — иначе в «сегодня» копились бы копии прошлых занятий.
+    static func carriesOver(_ task: TaskItem) -> Bool {
+        !task.done && task.seriesID == nil && task.time == nil
+    }
+
     /// Задачи дня. В «сегодня» попадают и невыполненные задачи прошлых дней — они переносятся сами.
     func tasks(forOffset offset: Int) -> [TaskItem] {
         tasks(on: Self.date(forOffset: offset))
@@ -296,7 +302,7 @@ final class TasksStore: ObservableObject {
         let today = Self.date(forOffset: 0)
         return items.filter { task in
             let day = Self.day(of: task)
-            return day == target || (target == today && day < target && !task.done)
+            return day == target || (target == today && day < target && Self.carriesOver(task))
         }
         .sorted { a, b in
             // Невыполненные сверху (по времени), выполненные внизу.

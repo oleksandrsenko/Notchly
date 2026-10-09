@@ -83,7 +83,7 @@ struct ExpandedIslandView: View {
                                alarms: model.alarms, tasks: model.tasks)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)
         case .notes: NotesView(store: model.notes, tasks: model.tasks, gemini: model.gemini, focus: model.focus,
-                               calendar: model.reminders.calendar)
+                               calendar: model.reminders.calendar, settings: model.settings)
         case .clipboard: ClipboardTab(clipboard: model.clipboard, shots: model.clipboard.shots, vault: model.vault,
                                       settings: model.settings)
         case .notifications: NotificationsView(gmail: model.gmail, system: model.systemNotifications)
