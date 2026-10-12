@@ -19,23 +19,42 @@ final class GmailClient: ObservableObject {
     @Published private(set) var isLoading = false
     /// Пароль в Связке ключей недоступен этой сборке — нужно ввести заново.
     @Published private(set) var needsPassword = false
+    /// Письма до этого момента в центре уведомлений не показываются: там только то, что пришло позже.
+    /// При первом запуске — сейчас, чтобы старые непрочитанные не висели строкой постоянно.
+    @Published private(set) var clearedAt: Date
 
     private var timer: Timer?
     /// Соединение и пароль между обновлениями: раньше каждые 30 секунд заново читался пароль из Связки ключей
     /// (расшифровка в securityd), открывалось TLS-соединение, шёл вход и скачивались 20 заголовков.
     private let mailbox = GmailMailbox()
     private static let accountKey = "gmail.account"
+    private static let clearedKey = "gmail.clearedAt"
     /// Новое непрочитанное письмо — остров показывает его карточкой.
     var onNew: ((MailItem) -> Void)?
     private var knownIDs: Set<String>?
 
     init() {
+        if let date = UserDefaults.standard.object(forKey: Self.clearedKey) as? Date {
+            clearedAt = date
+        } else {
+            clearedAt = Date()
+            UserDefaults.standard.set(clearedAt, forKey: Self.clearedKey)
+        }
         account = UserDefaults.standard.string(forKey: Self.accountKey)
         if account != nil { refresh() }
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refresh() }
     }
 
     var isConnected: Bool { account != nil }
+
+    /// Непрочитанные, пришедшие после последней очистки, — их и показывает центр уведомлений.
+    var newMails: [MailItem] { mails.filter { $0.date > clearedAt } }
+
+    /// Убирает текущие письма из центра уведомлений; строка Gmail вернётся со следующим новым письмом.
+    func clearNew() {
+        clearedAt = max(Date(), mails.map(\.date).max() ?? .distantPast)
+        UserDefaults.standard.set(clearedAt, forKey: Self.clearedKey)
+    }
 
     func connect(email: String, appPassword: String) {
         let email = email.trimmingCharacters(in: .whitespaces)

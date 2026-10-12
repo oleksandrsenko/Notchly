@@ -21,7 +21,11 @@ struct NotificationsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 4) {
-                gmailSection
+                // Строка Gmail появляется только с новыми письмами (или пока почту нужно подключить).
+                if !gmail.isConnected || gmail.needsPassword || !gmail.newMails.isEmpty {
+                    gmailSection
+                        .transition(.opacity.combined(with: .offset(y: -6)))
+                }
                 if system.needsFullDiskAccess {
                     accessRow
                 } else if let error = system.readError {
@@ -51,7 +55,7 @@ struct NotificationsView: View {
                     appSection(group)
                         .transition(.opacity.combined(with: .offset(y: -6)))
                 }
-                if !system.needsFullDiskAccess && appGroups.isEmpty && gmail.mails.isEmpty && gmail.isConnected {
+                if !system.needsFullDiskAccess && appGroups.isEmpty && gmail.newMails.isEmpty && gmail.isConnected {
                     Text(L("Новых уведомлений нет"))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.white.opacity(0.4))
@@ -71,24 +75,28 @@ struct NotificationsView: View {
 
     private var gmailSection: some View {
         VStack(spacing: 2) {
-            GroupHeader(icon: .store("com.google.Gmail", fallback: "envelope.fill"),
-                        title: "Gmail",
-                        subtitle: gmail.account ?? L("Не подключено"),
-                        count: gmail.mails.count,
-                        latest: gmail.mails.first?.date,
-                        isExpanded: expanded == "gmail") { toggle("gmail") }
+            HStack(spacing: 4) {
+                GroupHeader(icon: .store("com.google.Gmail", fallback: "envelope.fill"),
+                            title: "Gmail",
+                            subtitle: gmail.account ?? L("Не подключено"),
+                            count: gmail.newMails.count,
+                            latest: gmail.newMails.first?.date,
+                            isExpanded: expanded == "gmail") { toggle("gmail") }
+                if !gmail.newMails.isEmpty {
+                    DismissButton(help: L("Убрать письма из уведомлений")) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+                            gmail.clearNew()
+                            if expanded == "gmail" { expanded = nil }
+                        }
+                    }
+                }
+            }
             if expanded == "gmail" {
                 Group {
                     if gmail.isConnected && !gmail.needsPassword {
                         VStack(spacing: 2) {
-                            ForEach(gmail.mails) { mail in
+                            ForEach(gmail.newMails) { mail in
                                 MailRow(mail: mail) { gmail.open(mail) }
-                            }
-                            if gmail.mails.isEmpty {
-                                Text(L("Непрочитанных писем нет"))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.white.opacity(0.4))
-                                    .padding(.vertical, 6)
                             }
                             HStack(spacing: 14) {
                                 Button(L("Открыть Gmail")) { gmail.openInbox() }

@@ -237,7 +237,7 @@ private struct NotificationBell: View {
 
     private var unseen: Int {
         let seen = model.notificationsSeenAt
-        return gmail.mails.filter { $0.date > seen }.count + system.notifications.filter { $0.date > seen }.count
+        return gmail.newMails.filter { $0.date > seen }.count + system.notifications.filter { $0.date > seen }.count
     }
 
     var body: some View {
