@@ -80,6 +80,7 @@ enum English {
         "25 мин работы · 5 мин перерыв · 15 мин после каждого 4-го": "25 min work · 5 min break · 15 min after every 4th",
         "Продолжить": "Resume",
         "Пауза": "Pause",
+        "Начать заново": "Start over",
         "Закончить перерыв": "End break",
         "К перерыву": "Skip to break",
         "Остановить": "Stop",

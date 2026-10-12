@@ -93,6 +93,12 @@ final class FocusTimer: ObservableObject {
         }
     }
 
+    /// Начать текущую фазу заново с полного времени; задача и счёт подходов не меняются.
+    func restart() {
+        guard isActive else { return }
+        begin(phase)
+    }
+
     /// Пропустить текущую фазу: работа → перерыв, перерыв → новый подход.
     func skip() {
         switch phase {

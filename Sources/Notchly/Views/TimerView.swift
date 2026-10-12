@@ -102,6 +102,7 @@ struct TimerView: View {
                         HStack(spacing: 8) {
                             RoundButton(symbol: focus.isPaused ? "play.fill" : "pause.fill",
                                         help: focus.isPaused ? L("Продолжить") : L("Пауза")) { focus.togglePause() }
+                            RoundButton(symbol: "arrow.counterclockwise", help: L("Начать заново")) { focus.restart() }
                             RoundButton(symbol: "forward.end.fill",
                                         help: focus.phase.isBreak ? L("Закончить перерыв") : L("К перерыву")) { focus.skip() }
                             RoundButton(symbol: "stop.fill", help: L("Остановить")) { focus.stop() }
