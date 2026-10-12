@@ -206,7 +206,9 @@ struct SettingsView: View {
             } header: {
                 Text(L("Раскрытый остров"))
             } footer: {
-                Text(L("Клик мимо острова закрывает его сразу."))
+                Text(L("Клик мимо острова закрывает его сразу.") + (settings.openOnHome
+                    ? " " + L("Если открыть его снова в течение %@ с, он останется на той же вкладке.", "\(Int(IslandModel.tabMemory))")
+                    : ""))
                     .foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
             }
         }

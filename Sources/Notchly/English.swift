@@ -293,6 +293,9 @@ enum English {
         "Задержка": "Delay",
         "Раскрытый остров": "Expanded island",
         "Клик мимо острова закрывает его сразу.": "Clicking outside the island closes it right away.",
+        "Если открыть его снова в течение %@ с, он останется на той же вкладке.":
+            "Reopen it within %@ s and it stays on the same tab.",
+        "В Файлы": "To Files",
         "Слева от выреза": "Left of the notch",
         "Справа от выреза": "Right of the notch",
         "Пусто": "Empty",

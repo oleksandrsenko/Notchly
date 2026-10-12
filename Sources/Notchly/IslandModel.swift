@@ -143,6 +143,10 @@ final class IslandModel: ObservableObject {
     private var phaseWork: DispatchWorkItem?
     /// Идёт закрытие: содержимое уже гаснет, форма вот-вот свернётся.
     private var closing = false
+    /// Когда остров последний раз свернулся. Открытый вскоре после этого остров остаётся на той же вкладке.
+    private var collapsedAt: Date?
+    /// Сколько секунд после закрытия помнится открытая вкладка, прежде чем остров вернётся на главную.
+    static let tabMemory: TimeInterval = 20
     @Published var tab: IslandTab {
         didSet {
             if tab == .notifications || oldValue == .notifications { markNotificationsSeen() }
@@ -369,8 +373,10 @@ final class IslandModel: ObservableObject {
     func expand(to tab: IslandTab? = nil) {
         if let tab {
             self.tab = tab
-        } else if !isExpanded && settings.openOnHome {
-            // Каждое открытие начинается с главной (если так выбрано в настройках).
+        } else if !isExpanded && settings.openOnHome,
+                  collapsedAt.map({ Date().timeIntervalSince($0) >= Self.tabMemory }) ?? true {
+            // Открытие начинается с главной (если так выбрано в настройках), но только когда остров
+            // был закрыт дольше tabMemory — иначе возвращаемся туда, где были.
             self.tab = .home
         }
         guard !isExpanded || closing else { return }
@@ -414,6 +420,7 @@ final class IslandModel: ObservableObject {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.closing = false
+            self.collapsedAt = Date()
             withAnimation(IslandMetrics.close) { self.isExpanded = false }
         }
         phaseWork = work

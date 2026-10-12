@@ -215,7 +215,8 @@ final class NotchWindowController {
             let drag = NSPasteboard(name: .drag)
             let isFileDrag = drag.changeCount != dragChangeCount &&
                 (drag.types?.contains(.fileURL) ?? false)
-            if isFileDrag { model.expand(to: .shelf) }
+            // Вкладку не трогаем: в «Файлы» переходят через зону «+» внутри острова.
+            if isFileDrag { model.expand() }
             return
         }
 

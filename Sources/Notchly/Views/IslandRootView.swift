@@ -74,7 +74,7 @@ struct IslandRootView: View {
         .animation(.spring(response: 0.55, dampingFraction: 0.84), value: model.eventExpanded)
         .preferredColorScheme(.dark)
         .onChange(of: model.isDropTargeted) { _, targeted in
-            if targeted { model.expand(to: .shelf) }
+            if targeted { model.expand() }
         }
     }
 
@@ -147,7 +147,11 @@ struct IslandRootView: View {
         NSWorkspace.shared.openApplication(at: url, configuration: .init())
     }
 
+    /// Бросить файл куда угодно можно только на открытой вкладке «Файлы». На других вкладках
+    /// для этого есть отдельная зона «+» (ShelfDropZone) — иначе любое перетаскивание через остров,
+    /// например скриншота из него же в чат, перебрасывало бы на «Файлы».
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard model.tab == .shelf else { return false }
         var accepted = false
         for provider in providers where provider.canLoadObject(ofClass: URL.self) {
             accepted = true

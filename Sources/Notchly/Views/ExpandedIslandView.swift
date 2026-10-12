@@ -25,6 +25,12 @@ struct ExpandedIslandView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .staggered(1)
         }
+        .overlay(alignment: .bottom) {
+            if model.tab != .shelf && model.settings.isVisible(.shelf) {
+                ShelfDropZone(model: model) { select(.shelf) }
+                    .padding(.bottom, 14)
+            }
+        }
         .background(alignment: .bottom) {
             // Мягкое свечение цвета обложки на вкладке музыки.
             if model.tab == .music && media.hasTrack {
@@ -90,6 +96,62 @@ struct ExpandedIslandView: View {
         case .controls: ControlsView(volume: model.volume, brightness: model.brightness, mixer: model.mixer,
                                      openSettings: { SettingsWindowController.shared.show(model: model) })
         }
+    }
+}
+
+/// Зона «+ В Файлы» внизу острова. Появляется, пока над островом тянут файл. Если задержать файл
+/// над ней, открывается вкладка «Файлы»; если бросить прямо на неё — файл кладётся на полку.
+private struct ShelfDropZone: View {
+    @ObservedObject var model: IslandModel
+    var openShelf: () -> Void
+    @ViewState private var targeted = false
+    @ViewState private var openWork: DispatchWorkItem? = nil
+
+    var body: some View {
+        // Пока файл над зоной, внешний приёмник острова теряет isTargeted — зона не должна от этого пропадать.
+        let visible = model.isDropTargeted || targeted
+        HStack(spacing: 6) {
+            Image(systemName: "plus")
+                .font(.system(size: 13, weight: .bold))
+            Text(L("В Файлы"))
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(.white.opacity(targeted ? 1 : 0.75))
+        .padding(.horizontal, 18)
+        .frame(height: 38)
+        .background(Capsule().fill(.white.opacity(targeted ? 0.2 : 0.1)))
+        .overlay(Capsule().strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            .foregroundStyle(.white.opacity(targeted ? 0.7 : 0.35)))
+        .scaleEffect(targeted ? 1.06 : 1)
+        .contentShape(Capsule())
+        .onDrop(of: [.fileURL], isTargeted: $targeted, perform: drop)
+        .opacity(visible ? 1 : 0)
+        .allowsHitTesting(visible)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: targeted)
+        .animation(.easeOut(duration: 0.2), value: visible)
+        .onChange(of: targeted) { _, now in
+            openWork?.cancel()
+            openWork = nil
+            guard now else { return }
+            // Небольшая задержка, чтобы файл, который просто проносят мимо, не переключал вкладку.
+            let work = DispatchWorkItem { openShelf() }
+            openWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        }
+    }
+
+    private func drop(_ providers: [NSItemProvider]) -> Bool {
+        openWork?.cancel()
+        var accepted = false
+        for provider in providers where provider.canLoadObject(ofClass: URL.self) {
+            accepted = true
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url, url.isFileURL else { return }
+                DispatchQueue.main.async { model.shelf.add([url]) }
+            }
+        }
+        if accepted { openShelf() }
+        return accepted
     }
 }
 
