@@ -84,7 +84,7 @@ struct ExpandedIslandView: View {
     private func page(for tab: IslandTab) -> some View {
         switch tab {
         case .home: HomeView(model: model, media: media, batteries: model.batteries) { select(.music) }
-        case .music: MusicPlayerView(media: media)
+        case .music: MusicPlayerView(media: media, volume: model.volume)
         case .timer: TimerView(model: model, focus: model.focus, countdown: model.countdown,
                                alarms: model.alarms, tasks: model.tasks)
         case .shelf: ShelfView(store: model.shelf, isTargeted: model.isDropTargeted)

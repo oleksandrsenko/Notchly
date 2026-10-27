@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MusicPlayerView: View {
     @ObservedObject var media: MediaController
+    var volume: VolumeController
 
     var body: some View {
         if media.hasTrack {
@@ -71,6 +72,9 @@ struct MusicPlayerView: View {
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
+                .overlay(alignment: .leading) {
+                    PlayerVolume(volume: volume)
+                }
                 .overlay(alignment: .trailing) {
                     // Незаметная кнопка повтора трека.
                     IconButton(systemName: "repeat.1", size: 12, padding: 6) { media.toggleRepeat() }
@@ -136,6 +140,49 @@ private struct ProgressSection: View {
                 .foregroundStyle(.white.opacity(0.5))
             }
         }
+    }
+}
+
+/// Громкость системы прямо в плеере: динамик (клик — без звука) и тонкая полоска, как у прогресса.
+private struct PlayerVolume: View {
+    @ObservedObject var volume: VolumeController
+    @ViewState private var drag: Double?
+    @ViewState private var hovering = false
+
+    private static let width: CGFloat = 64
+
+    var body: some View {
+        let level = drag ?? (volume.isMuted ? 0 : Double(volume.volume))
+        HStack(spacing: 6) {
+            Button { volume.toggleMute() } label: {
+                Image(systemName: level < 0.01 ? "speaker.slash.fill" : "speaker.wave.3.fill",
+                      variableValue: level)
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(volume.isMuted ? L("Включить звук") : L("Выключить звук"))
+
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.18))
+                Capsule().fill(Color.white).frame(width: Self.width * level)
+            }
+            .frame(width: Self.width, height: hovering || drag != nil ? 6 : 4)
+            .frame(height: 18)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { g in
+                    let value = min(max(g.location.x / Self.width, 0), 1)
+                    drag = value
+                    volume.set(Float(value))
+                }
+                .onEnded { _ in drag = nil })
+        }
+        .foregroundStyle(.white.opacity(hovering || drag != nil ? 0.9 : 0.45))
+        .disabled(!volume.isAvailable)
+        .opacity(volume.isAvailable ? 1 : 0)
+        .onHover { h in withAnimation(.spring(response: 0.25)) { hovering = h } }
     }
 }
 

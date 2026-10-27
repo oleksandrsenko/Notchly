@@ -54,6 +54,8 @@ final class MediaController: ObservableObject {
     private var fallbackTimer: Timer?
     private var liveActivityWork: DispatchWorkItem?
     private var scriptArtworkTrack = ""
+    /// Ширина исходной обложки в пикселях: показываем уменьшенную копию, а сравнивать нужно с оригиналом.
+    private var artworkSourceWidth = 0
     /// Отложенная очистка: браузеры на мгновение присылают пустое состояние при переключении.
     private var clearWork: DispatchWorkItem?
     /// После нажатия ⏯ плеер ещё пару сотен миллисекунд присылает старое состояние —
@@ -250,7 +252,10 @@ final class MediaController: ObservableObject {
                 artwork = incomingID == trackID ? .keep : .clear
             } else if let b64 = msg["artwork"] as? String, let data = Data(base64Encoded: b64),
                       let image = NSImage(data: data) {
-                artwork = .set(image)
+                // Браузеры (YouTube) присылают обложку того же ролика заново почти каждую секунду, иногда
+                // другими байтами. Для того же трека меняем её, только если пришла более чёткая, — иначе остров мигает.
+                let sameTrack = incomingID == trackID && self.artwork != nil
+                if !sameTrack || Self.pixelWidth(image) > artworkSourceWidth { artwork = .set(image) }
             }
 
             apply(title: msg["title"] as? String ?? "",
@@ -338,7 +343,7 @@ final class MediaController: ObservableObject {
                 guard let self, self.trackID == id, Self.pixelWidth(self.artwork) < 512 else { return }
                 RemoteImages.artwork(title: self.title, artist: self.artist) { [weak self] image in
                     guard let self, let image, self.trackID == id,
-                          Self.pixelWidth(image) > Self.pixelWidth(self.artwork) else { return }
+                          Self.pixelWidth(image) > self.artworkSourceWidth else { return }
                     self.setArtwork(image)
                 }
             }
@@ -351,6 +356,7 @@ final class MediaController: ObservableObject {
     }
 
     private func setArtwork(_ image: NSImage?) {
+        artworkSourceWidth = Self.pixelWidth(image)
         let color = image.flatMap(ArtworkColor.accent(of:)) ?? .white
         let halo = image.flatMap(ArtworkColor.glow(of:))
         let crisp = image.map { ArtworkColor.displayCopy(of: $0) }

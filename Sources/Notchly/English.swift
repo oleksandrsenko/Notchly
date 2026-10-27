@@ -64,6 +64,8 @@ enum English {
         "Включите музыку — обложка и управление появятся здесь": "Play some music — artwork and controls will appear here",
         "Повтор трека включён": "Repeat track is on",
         "Повторять этот трек": "Repeat this track",
+        "Выключить звук": "Mute",
+        "Включить звук": "Unmute",
         "Открыть %@": "Open %@",
         "Открыть %@ в браузере": "Open %@ in the browser",
 

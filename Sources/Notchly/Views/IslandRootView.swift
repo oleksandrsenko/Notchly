@@ -83,20 +83,37 @@ struct IslandRootView: View {
         insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.06)),
         removal: .opacity.animation(.easeOut(duration: 0.12)))
 
-    @ViewBuilder
     private var content: some View {
+        ZStack(alignment: .top) {
+            compactContent
+                // При раскрытии свёрнутый вид (обложка трека слева от выреза) пропадает сразу, а не гаснет,
+                // пока опускается шторка: иначе обложка мелькала раньше остальных виджетов.
+                .opacity(model.isExpanded ? 0 : 1)
+                .animation(nil, value: model.isExpanded)
+            if model.isExpanded {
+                expandedContent
+            }
+        }
+    }
+
+    private var expandedContent: some View {
+        ExpandedIslandView(model: model, media: media)
+            // Фиксированный размер: при сворачивании форма обрезает содержимое, а не сжимает его.
+            .frame(width: IslandMetrics.expandedWidth,
+                   height: model.notchSize.height + IslandMetrics.expandedContentHeight)
+            // Открытие: виджеты выходят снизу, когда шторка уже опускается.
+            // Закрытие: сначала всё гаснет, потом сворачивается форма.
+            .opacity(model.debugFrame?.content ?? (model.expandedContentVisible ? 1 : 0))
+            .offset(y: 12 * (1 - (model.debugFrame?.content ?? (model.expandedContentVisible ? 1 : 0))))
+            .allowsHitTesting(model.expandedContentVisible)
+            .transition(.identity)
+    }
+
+    @ViewBuilder
+    private var compactContent: some View {
         let body = model.bodySize
         if model.isExpanded {
-            ExpandedIslandView(model: model, media: media)
-                // Фиксированный размер: при сворачивании форма обрезает содержимое, а не сжимает его.
-                .frame(width: IslandMetrics.expandedWidth,
-                       height: model.notchSize.height + IslandMetrics.expandedContentHeight)
-                // Открытие: виджеты выходят снизу, когда шторка уже опускается.
-                // Закрытие: сначала всё гаснет, потом сворачивается форма.
-                .opacity(model.debugFrame?.content ?? (model.expandedContentVisible ? 1 : 0))
-                .offset(y: 12 * (1 - (model.debugFrame?.content ?? (model.expandedContentVisible ? 1 : 0))))
-                .allowsHitTesting(model.expandedContentVisible)
-                .transition(.identity)
+            Color.clear.frame(width: 0, height: 0)
         } else if let event = model.event, model.eventExpanded {
             EventView(event: event, model: model) { model.dismissEvent() }
                 .frame(width: body.width, height: body.height)
